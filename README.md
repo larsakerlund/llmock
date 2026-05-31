@@ -5,9 +5,10 @@ without access to a real LLM. Point your SDK's `base_url` at llmock and it serve
 canned fixture responses that look exactly like the real provider — same JSON
 shapes, same streaming wire format, same error envelopes.
 
-> Status: early. Implements **OpenAI Chat Completions** (streaming + non-streaming)
-> with configurable latency and error/failure injection, plus the Models
-> endpoints. The Anthropic Messages API and more are on the roadmap below.
+> Status: early. Implements the **OpenAI Chat Completions** and **Responses**
+> APIs (streaming + non-streaming, text + tool calls) with configurable latency
+> and error/failure injection, plus the Models endpoints. The Anthropic Messages
+> API and more are on the roadmap below.
 
 ## Why
 
@@ -142,9 +143,13 @@ fragments).
 | Method | Path | Notes |
 |--------|------|-------|
 | POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
+| POST | `/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. Shares fixtures with Chat Completions. |
 | GET  | `/v1/models` | Lists a default model catalogue. |
 | GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
 | GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
+
+The same fixture rules drive both `/v1/chat/completions` and `/v1/responses` —
+author once, test whichever API your app calls.
 
 ## Architecture
 
@@ -164,16 +169,16 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 
 ## Fidelity testing
 
-Faithfulness is verified by running the **genuine provider SDKs** against llmock:
+Faithfulness is verified by running the **genuine provider SDKs** against llmock.
+One command builds, starts the server, and runs both API suites:
 
 ```sh
-python3 -m venv tests/sdk_compat/.venv
-tests/sdk_compat/.venv/bin/pip install openai
-cargo run -- --fixtures fixtures/example.yaml &        # start server
-tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_openai.py
+./tests/sdk_compat/run.sh
 ```
 
-If the real SDK parses our bytes and yields the expected objects, the format is
+It exercises the real `openai` SDK against both `/v1/chat/completions` and
+`/v1/responses` — text, streaming, tool calls, usage, and injected errors. If the
+real SDK parses our bytes and yields the expected objects, the format is
 faithful. Golden byte-diff tests against captured real responses come next.
 
 ## Roadmap
@@ -182,8 +187,8 @@ faithful. Golden byte-diff tests against captured real responses come next.
 - [x] M2 — Streaming (`chat.completion.chunk` SSE, `[DONE]`, `include_usage`) + configurable latency (TTFT, inter-token, chunking)
 - [x] M3 — Error/failure injection (HTTP errors + mid-stream truncate/malformed/hang faults)
 - [x] M4 — Tool/function calling (non-streaming + streamed argument fragments)
-- [ ] M5 — Record/replay cassettes (proxy a real API once, replay exactly)
-- [ ] M6 — OpenAI Responses API; per-provider path prefixes (`/openai`, `/anthropic`, …)
+- [x] M5 — OpenAI Responses API (`/v1/responses`): full `response.*` event lifecycle + non-streaming, text & tool calls
+- [ ] M6 — Record/replay cassettes (proxy a real API once, replay exactly); per-provider path prefixes (`/openai`, `/anthropic`, …)
 - [ ] M7 — Anthropic Messages API; then Gemini
 
 ## License

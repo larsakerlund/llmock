@@ -4,3 +4,4 @@
 //! a provider is a new adapter, not a change to the engine.
 
 pub mod openai;
+pub mod openai_responses;

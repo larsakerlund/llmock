@@ -35,3 +35,18 @@ pub fn system_fingerprint() -> String {
 pub fn tool_call_id() -> String {
     format!("call_{}", random_suffix(24))
 }
+
+/// `resp_…` Responses API response id.
+pub fn response_id() -> String {
+    format!("resp_{}", random_suffix(24))
+}
+
+/// `msg_…` Responses API output message item id.
+pub fn message_item_id() -> String {
+    format!("msg_{}", random_suffix(24))
+}
+
+/// `fc_…` Responses API function-call item id.
+pub fn function_item_id() -> String {
+    format!("fc_{}", random_suffix(24))
+}

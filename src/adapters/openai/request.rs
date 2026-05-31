@@ -47,7 +47,8 @@ pub struct ContentPart {
 }
 
 impl Content {
-    fn flatten(&self) -> String {
+    /// Collapse string or content-parts into plain text.
+    pub fn flatten(&self) -> String {
         match self {
             Content::Null => String::new(),
             Content::Text(s) => s.clone(),

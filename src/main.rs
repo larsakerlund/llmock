@@ -59,6 +59,7 @@ async fn main() {
     let app = Router::new()
         .route("/healthz", get(healthz))
         .merge(adapters::openai::router())
+        .merge(adapters::openai_responses::router())
         .with_state(state);
 
     let addr = SocketAddr::new(config.host, config.port);
