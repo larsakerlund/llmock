@@ -1,0 +1,22 @@
+# Example llmock fixture set.
+# Rules are tried top to bottom; the first whose `match` holds wins.
+# A rule with an empty `match` matches anything — keep it last as a fallback.
+
+rules:
+  - match:
+      user_contains: "weather"
+    respond:
+      content: "It's sunny and 22°C with a light breeze."
+      finish_reason: stop
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 9
+
+  - match:
+      model: "gpt-4o-mini"
+    respond:
+      content: "Mock reply from the gpt-4o-mini fixture."
+
+  - match: {}
+    respond:
+      content: "This is a default mock response from llmock."

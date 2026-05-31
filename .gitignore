@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+*.pdb
+.DS_Store
+
+# Python e2e/SDK-compat helpers
+tests/sdk_compat/.venv
+__pycache__/
+*.pyc
