@@ -32,8 +32,25 @@ pub struct Choice {
 #[derive(Debug, Serialize)]
 pub struct ResponseMessage {
     pub role: &'static str,
-    pub content: String,
+    /// `null` on the wire when the assistant only made tool calls.
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<ToolCallOut>,
     pub refusal: Option<()>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ToolCallOut {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: &'static str,
+    pub function: FunctionOut,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FunctionOut {
+    pub name: String,
+    pub arguments: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -65,7 +82,24 @@ impl ChatCompletion {
                 index: 0,
                 message: ResponseMessage {
                     role: "assistant",
-                    content: resp.content.clone(),
+                    // Content is null when the turn is purely tool calls.
+                    content: if resp.content.is_empty() && !resp.tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(resp.content.clone())
+                    },
+                    tool_calls: resp
+                        .tool_calls
+                        .iter()
+                        .map(|t| ToolCallOut {
+                            id: t.id.clone(),
+                            call_type: "function",
+                            function: FunctionOut {
+                                name: t.name.clone(),
+                                arguments: t.arguments.clone(),
+                            },
+                        })
+                        .collect(),
                     refusal: None,
                 },
                 logprobs: None,

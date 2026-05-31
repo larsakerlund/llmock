@@ -30,3 +30,8 @@ pub fn completion_id() -> String {
 pub fn system_fingerprint() -> String {
     format!("fp_{}", random_suffix(10))
 }
+
+/// `call_…` tool-call id, matching OpenAI's shape.
+pub fn tool_call_id() -> String {
+    format!("call_{}", random_suffix(24))
+}

@@ -44,6 +44,7 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
     let pieces = chunk_text(&resp.content, resp.stream.chunk_by);
     let spec = resp.stream;
     let fault = resp.fault;
+    let tool_calls = resp.tool_calls.clone();
     let usage = Usage {
         prompt_tokens: resp.usage.prompt_tokens,
         completion_tokens: resp.usage.completion_tokens,
@@ -53,12 +54,14 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
     let body = Body::from_stream(async_stream::stream! {
         let usage_field = if include_usage { UsageField::Null } else { UsageField::Absent };
 
-        // 1. role chunk
+        // 1. role chunk. Content is `""` for a text turn, omitted for a pure
+        //    tool-call turn (mirroring the real API's first delta).
+        let role_content = if tool_calls.is_empty() { Some(String::new()) } else { None };
         let role = Chunk {
             id: &id, created, model: &model, system_fingerprint: &fingerprint,
             choices: vec![ChunkChoice {
                 index: 0,
-                delta: Delta { role: Some("assistant"), content: Some(String::new()) },
+                delta: Delta { role: Some("assistant"), content: role_content, tool_calls: None },
                 logprobs: None,
                 finish_reason: None,
             }],
@@ -83,7 +86,7 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
                 id: &id, created, model: &model, system_fingerprint: &fingerprint,
                 choices: vec![ChunkChoice {
                     index: 0,
-                    delta: Delta { role: None, content: Some(piece.clone()) },
+                    delta: Delta { role: None, content: Some(piece.clone()), tool_calls: None },
                     logprobs: None,
                     finish_reason: None,
                 }],
@@ -119,12 +122,69 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
             return;
         }
 
+        // 2b. tool-call deltas: one opening delta per call carrying id/type/name
+        //     (and `arguments:""`), then the arguments streamed as fragments —
+        //     exactly how OpenAI streams function calls.
+        let ttft_for_tools = pieces.is_empty();
+        for (idx, tc) in tool_calls.iter().enumerate() {
+            let first_tool_emission = ttft_for_tools && idx == 0;
+            if let Some(d) = delay(if first_tool_emission { spec.ttft_ms } else { spec.inter_token_ms }) {
+                sleep(d).await;
+            }
+            let opening = Chunk {
+                id: &id, created, model: &model, system_fingerprint: &fingerprint,
+                choices: vec![ChunkChoice {
+                    index: 0,
+                    delta: Delta {
+                        role: None,
+                        content: None,
+                        tool_calls: Some(vec![ToolCallDelta {
+                            index: idx as u32,
+                            id: Some(tc.id.clone()),
+                            call_type: Some("function"),
+                            function: FunctionDelta { name: Some(tc.name.clone()), arguments: Some(String::new()) },
+                        }]),
+                    },
+                    logprobs: None,
+                    finish_reason: None,
+                }],
+                usage: usage_field,
+            };
+            yield Ok(frame(&opening));
+
+            for frag in chunk_text(&tc.arguments, spec.chunk_by) {
+                if let Some(d) = delay(spec.inter_token_ms) {
+                    sleep(d).await;
+                }
+                let arg_chunk = Chunk {
+                    id: &id, created, model: &model, system_fingerprint: &fingerprint,
+                    choices: vec![ChunkChoice {
+                        index: 0,
+                        delta: Delta {
+                            role: None,
+                            content: None,
+                            tool_calls: Some(vec![ToolCallDelta {
+                                index: idx as u32,
+                                id: None,
+                                call_type: None,
+                                function: FunctionDelta { name: None, arguments: Some(frag) },
+                            }]),
+                        },
+                        logprobs: None,
+                        finish_reason: None,
+                    }],
+                    usage: usage_field,
+                };
+                yield Ok(frame(&arg_chunk));
+            }
+        }
+
         // 3. final chunk: empty delta + finish_reason
         let final_chunk = Chunk {
             id: &id, created, model: &model, system_fingerprint: &fingerprint,
             choices: vec![ChunkChoice {
                 index: 0,
-                delta: Delta { role: None, content: None },
+                delta: Delta { role: None, content: None, tool_calls: None },
                 logprobs: None,
                 finish_reason: Some(finish),
             }],
@@ -211,6 +271,26 @@ struct Delta {
     role: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCallDelta>>,
+}
+
+#[derive(Serialize)]
+struct ToolCallDelta {
+    index: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    call_type: Option<&'static str>,
+    function: FunctionDelta,
+}
+
+#[derive(Serialize)]
+struct FunctionDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<String>,
 }
 
 /// Three-state `usage` field: absent (omit key), explicit null, or an object.

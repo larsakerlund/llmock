@@ -11,8 +11,9 @@ use serde::Deserialize;
 
 use crate::core::{
     ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason, StreamSpec,
-    Usage,
+    ToolCall, Usage,
 };
+use crate::util;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fixtures {
@@ -44,9 +45,14 @@ pub struct Match {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Respond {
-    pub content: String,
     #[serde(default)]
-    pub finish_reason: FinishReason,
+    pub content: String,
+    /// Tool/function calls to return. When present, `finish_reason` defaults to
+    /// `tool_calls` and `content` defaults to empty (null on the wire).
+    #[serde(default)]
+    pub tool_calls: Vec<FixtureToolCall>,
+    #[serde(default)]
+    pub finish_reason: Option<FinishReason>,
     #[serde(default)]
     pub usage: Option<FixtureUsage>,
     /// Per-rule streaming overrides. Any field left out falls back to the
@@ -57,6 +63,51 @@ pub struct Respond {
     /// when the request asked for streaming.
     #[serde(default)]
     pub fault: Option<FixtureFault>,
+}
+
+/// A tool/function call to return. `arguments` may be given as a JSON string or
+/// as a YAML mapping (which is serialized to a compact JSON string). `id` is
+/// generated if omitted.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FixtureToolCall {
+    pub name: String,
+    #[serde(default)]
+    pub arguments: Option<Args>,
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
+/// `arguments` accepts either a ready-made JSON string or a structured mapping.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Args {
+    /// Used verbatim as the arguments JSON string.
+    Str(String),
+    /// Any structured YAML value, serialized to a compact JSON string.
+    Value(serde_yaml::Value),
+}
+
+impl Args {
+    fn to_json_string(&self) -> String {
+        match self {
+            Args::Str(s) => s.clone(),
+            Args::Value(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()),
+        }
+    }
+}
+
+impl FixtureToolCall {
+    fn resolve(&self) -> ToolCall {
+        ToolCall {
+            id: self.id.clone().unwrap_or_else(util::tool_call_id),
+            name: self.name.clone(),
+            arguments: self
+                .arguments
+                .as_ref()
+                .map(|a| a.to_json_string())
+                .unwrap_or_else(|| "{}".to_string()),
+        }
+    }
 }
 
 /// An injected HTTP error. `status` and `message` are required; `type` defaults
@@ -216,14 +267,17 @@ impl Fixtures {
                 }
                 _ => {}
             }
-            // Validate chunk_by up front so a bad value fails at startup.
-            if let Some(cb) = rule
-                .respond
-                .as_ref()
-                .and_then(|r| r.stream.as_ref())
-                .and_then(|s| s.chunk_by.as_ref())
-            {
-                cb.resolve().map_err(|e| format!("rule {i}: {e}"))?;
+            if let Some(respond) = &rule.respond {
+                // A respond rule must produce something.
+                if respond.content.is_empty() && respond.tool_calls.is_empty() {
+                    return Err(format!(
+                        "rule {i}: `respond` needs `content` or `tool_calls`"
+                    ));
+                }
+                // Validate chunk_by up front so a bad value fails at startup.
+                if let Some(cb) = respond.stream.as_ref().and_then(|s| s.chunk_by.as_ref()) {
+                    cb.resolve().map_err(|e| format!("rule {i}: {e}"))?;
+                }
             }
         }
         Ok(fixtures)
@@ -236,7 +290,8 @@ impl Fixtures {
                 match_: Match::default(),
                 respond: Some(Respond {
                     content: "This is a mock response from llmock.".to_string(),
-                    finish_reason: FinishReason::Stop,
+                    tool_calls: Vec::new(),
+                    finish_reason: None,
                     usage: None,
                     stream: None,
                     fault: None,
@@ -263,6 +318,8 @@ impl Fixtures {
             .as_ref()
             .expect("rule validated to have respond or error");
 
+        let tool_calls: Vec<ToolCall> = respond.tool_calls.iter().map(|t| t.resolve()).collect();
+
         // Estimate token counts when the fixture doesn't pin them, so usage
         // looks plausible. A crude word count stands in for tokenization.
         let usage = match respond.usage {
@@ -270,10 +327,25 @@ impl Fixtures {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,
             },
-            None => Usage {
-                prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
-                completion_tokens: word_count(&respond.content),
-            },
+            None => {
+                let completion: u32 = word_count(&respond.content)
+                    + tool_calls
+                        .iter()
+                        .map(|t| word_count(&t.arguments) + 1)
+                        .sum::<u32>();
+                Usage {
+                    prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
+                    completion_tokens: completion,
+                }
+            }
+        };
+
+        // finish_reason defaults to `tool_calls` when tool calls are present,
+        // otherwise `stop` — unless the fixture pins it explicitly.
+        let stop_reason: StopReason = match respond.finish_reason {
+            Some(fr) => fr.into(),
+            None if !tool_calls.is_empty() => StopReason::ToolCalls,
+            None => StopReason::Stop,
         };
 
         // Resolve streaming spec: start from defaults, apply per-rule overrides.
@@ -294,7 +366,8 @@ impl Fixtures {
         Some(Outcome::Respond(NeutralResponse {
             model: req.model.clone(),
             content: respond.content.clone(),
-            stop_reason: respond.finish_reason.into(),
+            tool_calls,
+            stop_reason,
             usage,
             stream: spec,
             fault: respond.fault.as_ref().map(|f| f.resolve()),

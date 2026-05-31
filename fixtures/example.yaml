@@ -47,6 +47,18 @@ rules:
         kind: truncate
         after_tokens: 4
 
+  # --- Tool / function calling (M4) ---
+
+  - match:
+      user_contains: "forecast"        # respond with a tool call instead of text
+    respond:
+      tool_calls:
+        - name: get_weather
+          arguments:                   # a mapping is serialized to a JSON string
+            location: Tokyo
+            unit: celsius
+      # finish_reason defaults to tool_calls; content is null on the wire
+
   - match: {}
     respond:
       content: "This is a default mock response from llmock."

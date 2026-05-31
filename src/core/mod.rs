@@ -142,11 +142,23 @@ pub struct InjectError {
     pub param: Option<String>,
 }
 
+/// A function/tool call the assistant "made". `arguments` is the JSON arguments
+/// as a string (exactly how the providers represent it on the wire).
+#[derive(Debug, Clone)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
 /// A canned response in neutral form, produced by the fixture engine.
 #[derive(Debug, Clone)]
 pub struct NeutralResponse {
     pub model: String,
     pub content: String,
+    /// Tool calls the assistant returns. When non-empty, `content` is typically
+    /// empty and the stop reason is `ToolCalls`.
+    pub tool_calls: Vec<ToolCall>,
     pub stop_reason: StopReason,
     pub usage: Usage,
     /// How this response should stream, if the request asked for streaming.

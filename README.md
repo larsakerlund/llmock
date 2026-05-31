@@ -114,11 +114,34 @@ Or stream normally, then misbehave mid-stream with a **fault** (streaming only):
 - `malformed` — emit a broken SSE frame after N deltas (tests parse-error paths).
 - `hang` — stall for `hold_ms` after N deltas (tests client read timeouts).
 
-## Endpoints (milestone 1)
+### Tool / function calling
+
+Return tool calls instead of text. `finish_reason` defaults to `tool_calls` and
+`content` becomes `null`, matching the real API:
+
+```yaml
+  - match: { user_contains: "forecast" }
+    respond:
+      tool_calls:
+        - name: get_weather
+          arguments:               # a mapping → serialized to a JSON string
+            location: Tokyo
+            unit: celsius
+        # - name: another_tool     # multiple calls supported (each its own index)
+        #   arguments: '{"x":1}'   # …or give arguments as a raw JSON string
+```
+
+When streamed, this emits the opening tool-call delta (id/type/name) followed by
+the `function.arguments` as fragments — exactly OpenAI's wire behaviour — so the
+genuine SDK reassembles them into valid JSON. Argument fragmentation follows the
+same `chunk_by` granularity as text (use `chunk_by: char` for fine-grained
+fragments).
+
+## Endpoints
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming. |
+| POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
 | GET  | `/v1/models` | Lists a default model catalogue. |
 | GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
 | GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
@@ -158,7 +181,7 @@ faithful. Golden byte-diff tests against captured real responses come next.
 - [x] M1 — OpenAI Chat Completions (non-streaming) + Models, fixture engine, SDK-compat test
 - [x] M2 — Streaming (`chat.completion.chunk` SSE, `[DONE]`, `include_usage`) + configurable latency (TTFT, inter-token, chunking)
 - [x] M3 — Error/failure injection (HTTP errors + mid-stream truncate/malformed/hang faults)
-- [ ] M4 — Tool/function calling (streamed argument fragments)
+- [x] M4 — Tool/function calling (non-streaming + streamed argument fragments)
 - [ ] M5 — Record/replay cassettes (proxy a real API once, replay exactly)
 - [ ] M6 — OpenAI Responses API; per-provider path prefixes (`/openai`, `/anthropic`, …)
 - [ ] M7 — Anthropic Messages API; then Gemini

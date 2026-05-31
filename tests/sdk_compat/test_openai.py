@@ -136,6 +136,52 @@ except Exception:
     pass
 ok &= check("truncate fault streamed some chunks then ended", chunks_seen >= 1)
 
+# 9. Tool/function calling — non-streaming
+import json
+
+resp_tool = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "give me the forecast for tokyo"}],
+)
+msg = resp_tool.choices[0].message
+ok &= check("tool call: content is null", msg.content is None)
+ok &= check("tool call: finish_reason tool_calls", resp_tool.choices[0].finish_reason == "tool_calls")
+ok &= check("tool call: one tool_call present", msg.tool_calls is not None and len(msg.tool_calls) == 1)
+tc = msg.tool_calls[0]
+ok &= check("tool call: type function", tc.type == "function")
+ok &= check("tool call: name", tc.function.name == "get_weather")
+ok &= check("tool call: id has call_ prefix", tc.id.startswith("call_"))
+ok &= check(
+    "tool call: arguments parse to expected JSON",
+    json.loads(tc.function.arguments) == {"location": "Tokyo", "unit": "celsius"},
+)
+
+# 10. Tool/function calling — streaming (reassemble argument fragments by index)
+stream_tool = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "give me the forecast for tokyo"}],
+    stream=True,
+)
+names = {}
+args = {}
+finish_t = None
+for chunk in stream_tool:
+    choice = chunk.choices[0]
+    if choice.delta.tool_calls:
+        for d in choice.delta.tool_calls:
+            if d.function and d.function.name:
+                names[d.index] = d.function.name
+            if d.function and d.function.arguments:
+                args[d.index] = args.get(d.index, "") + d.function.arguments
+    if choice.finish_reason:
+        finish_t = choice.finish_reason
+ok &= check("stream tool call: name reassembled", names.get(0) == "get_weather")
+ok &= check(
+    "stream tool call: arguments reassembled to JSON",
+    0 in args and json.loads(args[0]) == {"location": "Tokyo", "unit": "celsius"},
+)
+ok &= check("stream tool call: finish_reason tool_calls", finish_t == "tool_calls")
+
 print()
 if ok:
     print("All SDK-compat checks passed.")
