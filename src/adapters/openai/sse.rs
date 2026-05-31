@@ -1,0 +1,195 @@
+//! Byte-exact OpenAI Chat Completions streaming (`chat.completion.chunk` SSE).
+//!
+//! The sequence we emit, matching the real API:
+//!   1. role chunk      — `delta:{"role":"assistant","content":""}`
+//!   2. content chunks  — `delta:{"content":"<piece>"}` (one per stream piece)
+//!   3. final chunk     — `delta:{}` + `finish_reason`
+//!   4. usage chunk     — `choices:[]` + `usage:{…}`   (only if include_usage)
+//!   5. `data: [DONE]`
+//!
+//! Every event is `data: <compact-json>\n\n`. When `include_usage` is set the
+//! real API also adds `"usage":null` to chunks 1–3, so we mirror that.
+
+use std::convert::Infallible;
+
+use axum::body::Body;
+use axum::http::{header, StatusCode};
+use axum::response::Response;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
+use tokio::time::sleep;
+
+use crate::core::NeutralResponse;
+use crate::stream::{chunk_text, delay};
+use crate::util;
+
+use super::response::{finish_reason_str, Usage};
+
+/// Build the streaming HTTP response for a neutral response.
+pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response {
+    // Stable across all chunks of one response, as the real API does.
+    let id = util::completion_id();
+    let created = util::unix_now();
+    let model = resp.model.clone();
+    let fingerprint = util::system_fingerprint();
+    let finish = finish_reason_str(resp.stop_reason);
+
+    let pieces = chunk_text(&resp.content, resp.stream.chunk_by);
+    let spec = resp.stream;
+    let usage = Usage {
+        prompt_tokens: resp.usage.prompt_tokens,
+        completion_tokens: resp.usage.completion_tokens,
+        total_tokens: resp.usage.total(),
+    };
+
+    let body = Body::from_stream(async_stream::stream! {
+        let usage_field = if include_usage { UsageField::Null } else { UsageField::Absent };
+
+        // 1. role chunk
+        let role = Chunk {
+            id: &id, created, model: &model, system_fingerprint: &fingerprint,
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: Delta { role: Some("assistant"), content: Some(String::new()) },
+                logprobs: None,
+                finish_reason: None,
+            }],
+            usage: usage_field,
+        };
+        yield Ok::<_, Infallible>(frame(&role));
+
+        // 2. content chunks, paced by ttft then inter-token delay
+        for (i, piece) in pieces.iter().enumerate() {
+            if let Some(d) = delay(if i == 0 { spec.ttft_ms } else { spec.inter_token_ms }) {
+                sleep(d).await;
+            }
+            let chunk = Chunk {
+                id: &id, created, model: &model, system_fingerprint: &fingerprint,
+                choices: vec![ChunkChoice {
+                    index: 0,
+                    delta: Delta { role: None, content: Some(piece.clone()) },
+                    logprobs: None,
+                    finish_reason: None,
+                }],
+                usage: usage_field,
+            };
+            yield Ok(frame(&chunk));
+        }
+
+        // 3. final chunk: empty delta + finish_reason
+        let final_chunk = Chunk {
+            id: &id, created, model: &model, system_fingerprint: &fingerprint,
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: Delta { role: None, content: None },
+                logprobs: None,
+                finish_reason: Some(finish),
+            }],
+            usage: usage_field,
+        };
+        yield Ok(frame(&final_chunk));
+
+        // 4. usage-only chunk (empty choices), only when requested
+        if include_usage {
+            let usage_chunk = Chunk {
+                id: &id, created, model: &model, system_fingerprint: &fingerprint,
+                choices: vec![],
+                usage: UsageField::Value(usage),
+            };
+            yield Ok(frame(&usage_chunk));
+        }
+
+        // 5. terminator
+        yield Ok(axum::body::Bytes::from_static(b"data: [DONE]\n\n"));
+    });
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header("connection", "keep-alive")
+        .body(body)
+        .expect("valid streaming response")
+}
+
+/// Serialize one chunk into an SSE `data:` frame.
+fn frame<T: Serialize>(value: &T) -> axum::body::Bytes {
+    let json = serde_json::to_string(value).expect("chunk serializes");
+    let mut buf = String::with_capacity(json.len() + 8);
+    buf.push_str("data: ");
+    buf.push_str(&json);
+    buf.push_str("\n\n");
+    axum::body::Bytes::from(buf)
+}
+
+/// One `chat.completion.chunk`. `Serialize` is hand-written so the constant
+/// `object` field appears in the right position without naming it at every
+/// construction site, and so `usage` can be omitted entirely when absent.
+struct Chunk<'a> {
+    id: &'a str,
+    created: u64,
+    model: &'a str,
+    system_fingerprint: &'a str,
+    choices: Vec<ChunkChoice>,
+    usage: UsageField,
+}
+
+impl Serialize for Chunk<'_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let has_usage = !self.usage.is_absent();
+        let fields = if has_usage { 7 } else { 6 };
+        let mut st = s.serialize_struct("chat.completion.chunk", fields)?;
+        st.serialize_field("id", self.id)?;
+        st.serialize_field("object", "chat.completion.chunk")?;
+        st.serialize_field("created", &self.created)?;
+        st.serialize_field("model", self.model)?;
+        st.serialize_field("system_fingerprint", self.system_fingerprint)?;
+        st.serialize_field("choices", &self.choices)?;
+        if has_usage {
+            st.serialize_field("usage", &self.usage)?;
+        } else {
+            st.skip_field("usage")?;
+        }
+        st.end()
+    }
+}
+
+#[derive(Serialize)]
+struct ChunkChoice {
+    index: u32,
+    delta: Delta,
+    logprobs: Option<()>,
+    finish_reason: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+struct Delta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+/// Three-state `usage` field: absent (omit key), explicit null, or an object.
+#[derive(Clone, Copy)]
+enum UsageField {
+    Absent,
+    Null,
+    Value(Usage),
+}
+
+impl UsageField {
+    fn is_absent(&self) -> bool {
+        matches!(self, UsageField::Absent)
+    }
+}
+
+impl Serialize for UsageField {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            // Absent is skipped before reaching here; treat as null defensively.
+            UsageField::Absent | UsageField::Null => s.serialize_none(),
+            UsageField::Value(u) => u.serialize(s),
+        }
+    }
+}

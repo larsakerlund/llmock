@@ -11,6 +11,10 @@ rules:
       usage:
         prompt_tokens: 12
         completion_tokens: 9
+      stream:
+        ttft_ms: 50         # delay before the first token
+        inter_token_ms: 10  # delay between tokens
+        chunk_by: word      # word | char | <positive integer>
 
   - match:
       model: "gpt-4o-mini"

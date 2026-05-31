@@ -8,6 +8,7 @@ mod config;
 mod core;
 mod fixtures;
 mod state;
+mod stream;
 mod util;
 
 use std::net::SocketAddr;
@@ -48,7 +49,12 @@ async fn main() {
         }
     };
 
-    let state = AppState::new(fixtures);
+    let stream_defaults = config.stream_defaults().unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    });
+
+    let state = AppState::new(fixtures, stream_defaults);
 
     let app = Router::new()
         .route("/healthz", get(healthz))

@@ -5,9 +5,9 @@ without access to a real LLM. Point your SDK's `base_url` at llmock and it serve
 canned fixture responses that look exactly like the real provider — same JSON
 shapes, same streaming wire format, same error envelopes.
 
-> Status: early. Milestone 1 implements **OpenAI Chat Completions (non-streaming)**
-> plus the Models endpoints. Streaming, error injection, configurable latency, and
-> the Anthropic Messages API are on the roadmap below.
+> Status: early. Implements **OpenAI Chat Completions** (streaming + non-streaming)
+> with configurable latency, plus the Models endpoints. Error injection and the
+> Anthropic Messages API are on the roadmap below.
 
 ## Why
 
@@ -59,11 +59,30 @@ rules:
 
 With no `--fixtures` file, a single built-in fallback response is used.
 
+### Streaming & latency
+
+When a request sets `stream: true`, the response is emitted as the provider's
+native SSE stream. A rule can shape the timing and granularity:
+
+```yaml
+  - match: { user_contains: "weather" }
+    respond:
+      content: "It's sunny and 22°C with a light breeze."
+      stream:
+        ttft_ms: 50          # delay before the first token
+        inter_token_ms: 10   # delay between tokens
+        chunk_by: word       # word | char | <positive integer> (chars/chunk)
+```
+
+Server-wide defaults (used when a rule doesn't override) come from flags/env:
+`--default-ttft-ms`, `--default-inter-token-ms`, `--default-chunk-by` — handy for
+applying realistic latency fleet-wide without editing fixtures.
+
 ## Endpoints (milestone 1)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/v1/chat/completions` | Non-streaming. `stream: true` returns 501 for now. |
+| POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming. |
 | GET  | `/v1/models` | Lists a default model catalogue. |
 | GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
 | GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
@@ -101,8 +120,8 @@ faithful. Golden byte-diff tests against captured real responses come next.
 ## Roadmap
 
 - [x] M1 — OpenAI Chat Completions (non-streaming) + Models, fixture engine, SDK-compat test
-- [ ] M2 — Streaming (`chat.completion.chunk` SSE, `[DONE]`, `include_usage`)
-- [ ] M3 — Error/failure injection (429/500/timeouts/malformed streams) + configurable latency (TTFT, inter-token)
+- [x] M2 — Streaming (`chat.completion.chunk` SSE, `[DONE]`, `include_usage`) + configurable latency (TTFT, inter-token, chunking)
+- [ ] M3 — Error/failure injection (429/500/timeouts/malformed streams)
 - [ ] M4 — Tool/function calling (streamed argument fragments)
 - [ ] M5 — Record/replay cassettes (proxy a real API once, replay exactly)
 - [ ] M6 — OpenAI Responses API; per-provider path prefixes (`/openai`, `/anthropic`, …)

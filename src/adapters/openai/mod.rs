@@ -5,8 +5,10 @@ pub mod error;
 pub mod models;
 pub mod request;
 pub mod response;
+pub mod sse;
 
 use axum::extract::State;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
@@ -26,24 +28,24 @@ pub fn router() -> Router<AppState> {
 async fn chat_completions(
     State(state): State<AppState>,
     body: Result<Json<ChatCompletionRequest>, axum::extract::rejection::JsonRejection>,
-) -> Result<Json<ChatCompletion>, ApiError> {
+) -> Result<Response, ApiError> {
     let Json(req) = body.map_err(|e| ApiError::invalid_request(e.body_text()))?;
     let neutral = req.into_neutral();
 
+    let resp = state
+        .fixtures
+        .respond_to(&neutral, state.stream_defaults)
+        .ok_or_else(|| {
+            ApiError::no_fixture(format!(
+                "no fixture rule matched (model={:?}); add a fallback rule with an empty `match`",
+                neutral.model
+            ))
+        })?;
+
     if neutral.stream {
-        // Streaming lands in the next milestone; be honest until then.
-        return Err(ApiError::not_implemented(
-            "streaming responses are not implemented yet",
-        ));
+        Ok(sse::stream_response(&resp, neutral.include_usage))
+    } else {
+        Ok(Json(ChatCompletion::from_neutral(&resp)).into_response())
     }
-
-    let resp = state.fixtures.respond_to(&neutral).ok_or_else(|| {
-        ApiError::no_fixture(format!(
-            "no fixture rule matched (model={:?}); add a fallback rule with an empty `match`",
-            neutral.model
-        ))
-    })?;
-
-    Ok(Json(ChatCompletion::from_neutral(&resp)))
 }
 

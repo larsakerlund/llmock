@@ -61,7 +61,9 @@ impl ApiError {
         )
     }
 
-    /// A capability llmock has not implemented yet.
+    /// A capability llmock has not implemented yet. Kept for endpoints still on
+    /// the roadmap.
+    #[allow(dead_code)]
     pub fn not_implemented(message: impl Into<String>) -> Self {
         ApiError::new(
             StatusCode::NOT_IMPLEMENTED,

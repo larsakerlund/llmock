@@ -59,6 +59,47 @@ resp2 = client.chat.completions.create(
 )
 ok &= check("fallback fixture content", "default mock response" in resp2.choices[0].message.content)
 
+# 5. Streaming — the genuine SDK must parse our chunk stream
+stream = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "the weather?"}],
+    stream=True,
+)
+assembled = ""
+roles = []
+finish = None
+all_chunk_type_ok = True
+for chunk in stream:
+    all_chunk_type_ok &= chunk.object == "chat.completion.chunk"
+    choice = chunk.choices[0]
+    if choice.delta.role:
+        roles.append(choice.delta.role)
+    if choice.delta.content:
+        assembled += choice.delta.content
+    if choice.finish_reason:
+        finish = choice.finish_reason
+ok &= check("every chunk is chat.completion.chunk", all_chunk_type_ok)
+ok &= check("stream reassembles to full text", assembled == "It's sunny and 22°C with a light breeze.")
+ok &= check("stream first delta carried role=assistant", roles == ["assistant"])
+ok &= check("stream finish_reason stop", finish == "stop")
+
+# 6. Streaming with usage on the final chunk
+stream2 = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "the weather?"}],
+    stream=True,
+    stream_options={"include_usage": True},
+)
+usage = None
+text2 = ""
+for chunk in stream2:
+    if chunk.usage is not None:
+        usage = chunk.usage
+    if chunk.choices and chunk.choices[0].delta.content:
+        text2 += chunk.choices[0].delta.content
+ok &= check("include_usage yields a usage object", usage is not None and usage.total_tokens == 21)
+ok &= check("usage chunk has empty choices, text still complete", text2 == "It's sunny and 22°C with a light breeze.")
+
 print()
 if ok:
     print("All SDK-compat checks passed.")

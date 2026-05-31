@@ -65,6 +65,57 @@ impl Usage {
     }
 }
 
+/// How to split response text into streamed pieces.
+#[derive(Debug, Clone, Copy)]
+pub enum ChunkBy {
+    /// One delta per whitespace-delimited word (whitespace kept with the word).
+    Word,
+    /// One delta per character.
+    Char,
+    /// One delta per fixed run of `n` characters.
+    Chars(usize),
+}
+
+impl ChunkBy {
+    /// Parse from a config string: `word`, `char`, or a positive integer
+    /// (characters per chunk).
+    pub fn parse(s: &str) -> Result<ChunkBy, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "word" => Ok(ChunkBy::Word),
+            "char" | "character" => Ok(ChunkBy::Char),
+            other => other
+                .parse::<usize>()
+                .ok()
+                .filter(|n| *n > 0)
+                .map(ChunkBy::Chars)
+                .ok_or_else(|| {
+                    format!("invalid chunk_by {s:?} (expected `word`, `char`, or a positive integer)")
+                }),
+        }
+    }
+}
+
+/// Provider-neutral streaming behaviour: how fast and in what granularity to
+/// emit deltas. Applies to any adapter's streaming serializer.
+#[derive(Debug, Clone, Copy)]
+pub struct StreamSpec {
+    /// Delay before the first content delta (time-to-first-token), in ms.
+    pub ttft_ms: u64,
+    /// Delay between subsequent content deltas, in ms.
+    pub inter_token_ms: u64,
+    pub chunk_by: ChunkBy,
+}
+
+impl Default for StreamSpec {
+    fn default() -> Self {
+        StreamSpec {
+            ttft_ms: 0,
+            inter_token_ms: 0,
+            chunk_by: ChunkBy::Word,
+        }
+    }
+}
+
 /// A canned response in neutral form, produced by the fixture engine.
 #[derive(Debug, Clone)]
 pub struct NeutralResponse {
@@ -72,4 +123,6 @@ pub struct NeutralResponse {
     pub content: String,
     pub stop_reason: StopReason,
     pub usage: Usage,
+    /// How this response should stream, if the request asked for streaming.
+    pub stream: StreamSpec,
 }

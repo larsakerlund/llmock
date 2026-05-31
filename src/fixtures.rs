@@ -9,7 +9,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::core::{NeutralRequest, NeutralResponse, StopReason, Usage};
+use crate::core::{ChunkBy, NeutralRequest, NeutralResponse, StopReason, StreamSpec, Usage};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fixtures {
@@ -41,6 +41,36 @@ pub struct Respond {
     pub finish_reason: FinishReason,
     #[serde(default)]
     pub usage: Option<FixtureUsage>,
+    /// Per-rule streaming overrides. Any field left out falls back to the
+    /// server's global stream defaults.
+    #[serde(default)]
+    pub stream: Option<FixtureStream>,
+}
+
+/// Per-rule streaming overrides. Each field is optional; absent fields inherit
+/// the global defaults.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct FixtureStream {
+    pub ttft_ms: Option<u64>,
+    pub inter_token_ms: Option<u64>,
+    pub chunk_by: Option<ChunkByConfig>,
+}
+
+/// `chunk_by` in YAML may be a string (`word`/`char`) or a number (chars/chunk).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum ChunkByConfig {
+    Named(String),
+    Size(usize),
+}
+
+impl ChunkByConfig {
+    fn resolve(&self) -> Result<ChunkBy, String> {
+        match self {
+            ChunkByConfig::Named(s) => ChunkBy::parse(s),
+            ChunkByConfig::Size(n) => ChunkBy::parse(&n.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -90,12 +120,19 @@ impl Match {
 }
 
 impl Fixtures {
-    /// Load fixtures from a YAML file.
+    /// Load fixtures from a YAML file, validating `chunk_by` values up front so
+    /// a bad config fails at startup rather than mid-request.
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("reading {}: {e}", path.display()))?;
         let fixtures: Fixtures = serde_yaml::from_str(&text)
             .map_err(|e| format!("parsing {}: {e}", path.display()))?;
+        for (i, rule) in fixtures.rules.iter().enumerate() {
+            if let Some(cb) = rule.respond.stream.as_ref().and_then(|s| s.chunk_by.as_ref()) {
+                cb.resolve()
+                    .map_err(|e| format!("rule {i}: {e}"))?;
+            }
+        }
         Ok(fixtures)
     }
 
@@ -108,14 +145,20 @@ impl Fixtures {
                     content: "This is a mock response from llmock.".to_string(),
                     finish_reason: FinishReason::Stop,
                     usage: None,
+                    stream: None,
                 },
             }],
         }
     }
 
     /// Find the first matching rule and build a neutral response from it.
-    /// Returns `None` if nothing matched (no fallback rule present).
-    pub fn respond_to(&self, req: &NeutralRequest) -> Option<NeutralResponse> {
+    /// `defaults` supplies streaming timing/granularity for any field a rule
+    /// does not override. Returns `None` if nothing matched.
+    pub fn respond_to(
+        &self,
+        req: &NeutralRequest,
+        defaults: StreamSpec,
+    ) -> Option<NeutralResponse> {
         let rule = self.rules.iter().find(|r| r.match_.matches(req))?;
 
         // Estimate token counts when the fixture doesn't pin them, so usage
@@ -135,11 +178,27 @@ impl Fixtures {
             },
         };
 
+        // Resolve streaming spec: start from defaults, apply per-rule overrides.
+        let mut spec = defaults;
+        if let Some(fs) = &rule.respond.stream {
+            if let Some(t) = fs.ttft_ms {
+                spec.ttft_ms = t;
+            }
+            if let Some(it) = fs.inter_token_ms {
+                spec.inter_token_ms = it;
+            }
+            if let Some(cb) = &fs.chunk_by {
+                // Validated at load; fall back to the default on the off chance.
+                spec.chunk_by = cb.resolve().unwrap_or(spec.chunk_by);
+            }
+        }
+
         Some(NeutralResponse {
             model: req.model.clone(),
             content: rule.respond.content.clone(),
             stop_reason: rule.respond.finish_reason.into(),
             usage,
+            stream: spec,
         })
     }
 }
