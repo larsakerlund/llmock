@@ -5,10 +5,10 @@ without access to a real LLM. Point your SDK's `base_url` at llmock and it serve
 canned fixture responses that look exactly like the real provider — same JSON
 shapes, same streaming wire format, same error envelopes.
 
-> Status: early. Implements the **OpenAI Chat Completions** and **Responses**
-> APIs (streaming + non-streaming, text + tool calls) with configurable latency
-> and error/failure injection, plus the Models endpoints. The Anthropic Messages
-> API and more are on the roadmap below.
+> Status: early but multi-provider. Implements the **OpenAI Chat Completions**,
+> **OpenAI Responses**, and **Anthropic Messages** APIs (streaming +
+> non-streaming, text + tool calls) with configurable latency and error/failure
+> injection, plus the Models endpoints. One fixture set drives all three.
 
 ## Why
 
@@ -143,13 +143,16 @@ fragments).
 | Method | Path | Notes |
 |--------|------|-------|
 | POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
-| POST | `/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. Shares fixtures with Chat Completions. |
+| POST | `/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. |
+| POST | `/v1/messages` | Anthropic Messages API: `message_start`/`content_block_*`/`message_delta`/`message_stop` streaming and non-streaming; text and tool use. `x-api-key`/`anthropic-version` accepted and ignored. |
 | GET  | `/v1/models` | Lists a default model catalogue. |
 | GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
 | GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
 
-The same fixture rules drive both `/v1/chat/completions` and `/v1/responses` —
-author once, test whichever API your app calls.
+The same fixture rules drive `/v1/chat/completions`, `/v1/responses`, and
+`/v1/messages` — author once, test whichever API (and provider) your app calls.
+Point each SDK's `base_url` at llmock: OpenAI → `http://host:8080/v1`,
+Anthropic → `http://host:8080`.
 
 ## Architecture
 
@@ -162,10 +165,16 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
      → Stream Simulator  (chunk response into deltas with configurable timing)
 ```
 
-- `src/core/`            — provider-neutral request/response model
-- `src/adapters/openai/` — OpenAI wire format (request, response, models, errors)
-- `src/fixtures.rs`      — matching rules
-- `src/util.rs`          — id/timestamp helpers
+- `src/core/`                    — provider-neutral request/response model
+- `src/adapters/openai/`         — OpenAI Chat Completions + Models
+- `src/adapters/openai_responses/` — OpenAI Responses API
+- `src/adapters/anthropic/`      — Anthropic Messages API
+- `src/fixtures.rs`              — matching rules
+- `src/stream.rs`               — text chunking + timing
+- `src/util.rs`                 — id/timestamp helpers
+
+Adding a provider is a new `adapters/<provider>/` module (request parse + wire
+serialize); the core, fixture engine, latency, and fault injection are untouched.
 
 ## Fidelity testing
 
@@ -176,10 +185,10 @@ One command builds, starts the server, and runs both API suites:
 ./tests/sdk_compat/run.sh
 ```
 
-It exercises the real `openai` SDK against both `/v1/chat/completions` and
-`/v1/responses` — text, streaming, tool calls, usage, and injected errors. If the
-real SDK parses our bytes and yields the expected objects, the format is
-faithful. Golden byte-diff tests against captured real responses come next.
+It exercises the real `openai` and `anthropic` SDKs against all three APIs —
+text, streaming, tool calls, usage, and injected errors. If the real SDKs parse
+our bytes and yield the expected objects, the format is faithful. Golden
+byte-diff tests against captured real responses come next.
 
 ## Roadmap
 
@@ -188,8 +197,9 @@ faithful. Golden byte-diff tests against captured real responses come next.
 - [x] M3 — Error/failure injection (HTTP errors + mid-stream truncate/malformed/hang faults)
 - [x] M4 — Tool/function calling (non-streaming + streamed argument fragments)
 - [x] M5 — OpenAI Responses API (`/v1/responses`): full `response.*` event lifecycle + non-streaming, text & tool calls
+- [x] M7 — Anthropic Messages API (`/v1/messages`): named-event streaming lifecycle + non-streaming, text & tool use, Anthropic error envelope
 - [ ] M6 — Record/replay cassettes (proxy a real API once, replay exactly); per-provider path prefixes (`/openai`, `/anthropic`, …)
-- [ ] M7 — Anthropic Messages API; then Gemini
+- [ ] M8 — Google Gemini API
 
 ## License
 

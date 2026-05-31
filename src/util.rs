@@ -50,3 +50,13 @@ pub fn message_item_id() -> String {
 pub fn function_item_id() -> String {
     format!("fc_{}", random_suffix(24))
 }
+
+/// `msg_…` Anthropic Messages id.
+pub fn anthropic_message_id() -> String {
+    format!("msg_{}", random_suffix(24))
+}
+
+/// `toolu_…` Anthropic tool-use block id.
+pub fn tool_use_id() -> String {
+    format!("toolu_{}", random_suffix(24))
+}

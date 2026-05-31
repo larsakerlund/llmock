@@ -11,9 +11,9 @@ PORT="${PORT:-8088}"
 VENV="tests/sdk_compat/.venv"
 
 if [ ! -x "$VENV/bin/python" ]; then
-  echo "Creating venv and installing openai SDK..."
+  echo "Creating venv and installing provider SDKs..."
   python3 -m venv "$VENV"
-  "$VENV/bin/pip" -q install --upgrade pip openai
+  "$VENV/bin/pip" -q install --upgrade pip openai anthropic
 fi
 
 echo "Building llmock..."
@@ -31,12 +31,16 @@ for _ in $(seq 1 50); do
 done
 
 export LLMOCK_BASE_URL="http://127.0.0.1:$PORT/v1"
+export LLMOCK_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
 echo
-echo "== Chat Completions API =="
+echo "== OpenAI Chat Completions API =="
 "$VENV/bin/python" tests/sdk_compat/test_openai.py
 echo
-echo "== Responses API =="
+echo "== OpenAI Responses API =="
 "$VENV/bin/python" tests/sdk_compat/test_openai_responses.py
+echo
+echo "== Anthropic Messages API =="
+"$VENV/bin/python" tests/sdk_compat/test_anthropic.py
 
 echo
 echo "All SDK-compat suites passed."
