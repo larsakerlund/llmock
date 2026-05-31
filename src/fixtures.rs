@@ -251,8 +251,12 @@ impl Fixtures {
     pub(crate) fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("reading {}: {e}", path.display()))?;
-        let fixtures: Fixtures =
-            serde_yaml::from_str(&text).map_err(|e| format!("parsing {}: {e}", path.display()))?;
+        Self::from_yaml(&text).map_err(|e| format!("{}: {e}", path.display()))
+    }
+
+    /// Parse and validate fixtures from a YAML string.
+    pub(crate) fn from_yaml(text: &str) -> Result<Self, String> {
+        let fixtures: Fixtures = serde_yaml::from_str(text).map_err(|e| format!("parsing: {e}"))?;
         for (i, rule) in fixtures.rules.iter().enumerate() {
             // Each rule must do exactly one thing.
             match (&rule.respond, &rule.error) {
