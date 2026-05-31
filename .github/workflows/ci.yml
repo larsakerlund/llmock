@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to match rust-toolchain.toml so CI clippy == local clippy.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.88.0"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: rustfmt
@@ -26,11 +28,13 @@ jobs:
         run: cargo test --all-targets
 
   sdk-e2e:
-    name: real-SDK e2e (OpenAI + Anthropic)
+    name: real-SDK e2e (OpenAI, Anthropic, Gemini)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
