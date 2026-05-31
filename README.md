@@ -187,8 +187,26 @@ One command builds, starts the server, and runs both API suites:
 
 It exercises the real `openai` and `anthropic` SDKs against all three APIs —
 text, streaming, tool calls, usage, and injected errors. If the real SDKs parse
-our bytes and yield the expected objects, the format is faithful. Golden
-byte-diff tests against captured real responses come next.
+our bytes and yield the expected objects, the format is faithful.
+
+### What "faithful" covers (and what it doesn't)
+
+- **Protocol fidelity — guaranteed, SDK-verified.** The wire shapes are built
+  against the providers' own SDK type definitions and validated by running the
+  genuine SDKs end-to-end. The protocol does **not** vary by model within a
+  provider (`gpt-4o` and `gpt-4o-mini` share identical Chat Completions framing;
+  all Claude models share the Messages framing), so one adapter is faithful
+  across every model of that provider.
+- **Byte-level server fidelity — in progress.** SDK-parse proves the *client*
+  accepts our bytes; it does not prove we're byte-identical to the real *server*
+  (SDKs ignore unknown fields, field order, null-vs-absent). Record/replay
+  cassettes (roadmap) close this by byte-diffing against captured real responses.
+- **Token counts are approximate.** `usage` is a word-count heuristic, not a real
+  tokenizer, so counts won't match a specific model.
+- **Model-specific behaviour is developer-authored.** Things that genuinely vary
+  by model — extended thinking/reasoning items, vision, refusals, specific stop
+  reasons — aren't emulated automatically; you express whatever you need in your
+  (developer-owned) fixtures.
 
 ## Roadmap
 
