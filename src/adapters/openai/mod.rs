@@ -12,6 +12,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
+use crate::core::Outcome;
 use crate::state::AppState;
 use error::ApiError;
 use request::ChatCompletionRequest;
@@ -32,15 +33,22 @@ async fn chat_completions(
     let Json(req) = body.map_err(|e| ApiError::invalid_request(e.body_text()))?;
     let neutral = req.into_neutral();
 
-    let resp = state
+    let outcome = state
         .fixtures
-        .respond_to(&neutral, state.stream_defaults)
+        .outcome_for(&neutral, state.stream_defaults)
         .ok_or_else(|| {
             ApiError::no_fixture(format!(
                 "no fixture rule matched (model={:?}); add a fallback rule with an empty `match`",
                 neutral.model
             ))
         })?;
+
+    let resp = match outcome {
+        // Upfront errors come back as a normal HTTP error, even for stream
+        // requests (the real API errors before the stream starts).
+        Outcome::Error(err) => return Err(ApiError::from_inject(err)),
+        Outcome::Respond(resp) => resp,
+    };
 
     if neutral.stream {
         Ok(sse::stream_response(&resp, neutral.include_usage))

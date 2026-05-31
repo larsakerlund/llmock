@@ -9,7 +9,10 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::core::{ChunkBy, NeutralRequest, NeutralResponse, StopReason, StreamSpec, Usage};
+use crate::core::{
+    ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason, StreamSpec,
+    Usage,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fixtures {
@@ -21,7 +24,12 @@ pub struct Fixtures {
 pub struct Rule {
     #[serde(default, rename = "match")]
     pub match_: Match,
-    pub respond: Respond,
+    /// Serve a (possibly streaming) response. Required unless `error` is set.
+    #[serde(default)]
+    pub respond: Option<Respond>,
+    /// Fail the request with an injected HTTP error instead of responding.
+    #[serde(default)]
+    pub error: Option<FixtureError>,
 }
 
 /// Conditions to test against a request. All present conditions must hold
@@ -45,6 +53,74 @@ pub struct Respond {
     /// server's global stream defaults.
     #[serde(default)]
     pub stream: Option<FixtureStream>,
+    /// A mid-stream fault to inject (truncate / malformed / hang). Only applies
+    /// when the request asked for streaming.
+    #[serde(default)]
+    pub fault: Option<FixtureFault>,
+}
+
+/// An injected HTTP error. `status` and `message` are required; `type` defaults
+/// to a generic `api_error`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FixtureError {
+    pub status: u16,
+    #[serde(default = "default_error_type", rename = "type")]
+    pub error_type: String,
+    pub message: String,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub param: Option<String>,
+}
+
+fn default_error_type() -> String {
+    "api_error".to_string()
+}
+
+/// A mid-stream fault. `after_tokens` is how many content deltas to emit before
+/// the fault triggers (default 1).
+#[derive(Debug, Clone, Deserialize)]
+pub struct FixtureFault {
+    pub kind: FaultKind,
+    #[serde(default)]
+    pub after_tokens: Option<usize>,
+    /// For `hang`: how long to stall before giving up (default 60_000 ms).
+    #[serde(default)]
+    pub hold_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FaultKind {
+    Truncate,
+    Malformed,
+    Hang,
+}
+
+impl FixtureFault {
+    fn resolve(&self) -> Fault {
+        let after = self.after_tokens.unwrap_or(1);
+        match self.kind {
+            FaultKind::Truncate => Fault::Truncate { after },
+            FaultKind::Malformed => Fault::Malformed { after },
+            FaultKind::Hang => Fault::Hang {
+                after,
+                hold_ms: self.hold_ms.unwrap_or(60_000),
+            },
+        }
+    }
+}
+
+impl FixtureError {
+    fn resolve(&self) -> InjectError {
+        InjectError {
+            status: self.status,
+            error_type: self.error_type.clone(),
+            message: self.message.clone(),
+            code: self.code.clone(),
+            param: self.param.clone(),
+        }
+    }
 }
 
 /// Per-rule streaming overrides. Each field is optional; absent fields inherit
@@ -128,9 +204,26 @@ impl Fixtures {
         let fixtures: Fixtures = serde_yaml::from_str(&text)
             .map_err(|e| format!("parsing {}: {e}", path.display()))?;
         for (i, rule) in fixtures.rules.iter().enumerate() {
-            if let Some(cb) = rule.respond.stream.as_ref().and_then(|s| s.chunk_by.as_ref()) {
-                cb.resolve()
-                    .map_err(|e| format!("rule {i}: {e}"))?;
+            // Each rule must do exactly one thing.
+            match (&rule.respond, &rule.error) {
+                (None, None) => {
+                    return Err(format!("rule {i}: needs a `respond` or an `error` block"))
+                }
+                (Some(_), Some(_)) => {
+                    return Err(format!(
+                        "rule {i}: has both `respond` and `error`; use only one"
+                    ))
+                }
+                _ => {}
+            }
+            // Validate chunk_by up front so a bad value fails at startup.
+            if let Some(cb) = rule
+                .respond
+                .as_ref()
+                .and_then(|r| r.stream.as_ref())
+                .and_then(|s| s.chunk_by.as_ref())
+            {
+                cb.resolve().map_err(|e| format!("rule {i}: {e}"))?;
             }
         }
         Ok(fixtures)
@@ -141,46 +234,51 @@ impl Fixtures {
         Fixtures {
             rules: vec![Rule {
                 match_: Match::default(),
-                respond: Respond {
+                respond: Some(Respond {
                     content: "This is a mock response from llmock.".to_string(),
                     finish_reason: FinishReason::Stop,
                     usage: None,
                     stream: None,
-                },
+                    fault: None,
+                }),
+                error: None,
             }],
         }
     }
 
-    /// Find the first matching rule and build a neutral response from it.
+    /// Find the first matching rule and turn it into an [`Outcome`].
     /// `defaults` supplies streaming timing/granularity for any field a rule
     /// does not override. Returns `None` if nothing matched.
-    pub fn respond_to(
-        &self,
-        req: &NeutralRequest,
-        defaults: StreamSpec,
-    ) -> Option<NeutralResponse> {
+    pub fn outcome_for(&self, req: &NeutralRequest, defaults: StreamSpec) -> Option<Outcome> {
         let rule = self.rules.iter().find(|r| r.match_.matches(req))?;
+
+        // An `error` rule short-circuits to an injected HTTP error.
+        if let Some(err) = &rule.error {
+            return Some(Outcome::Error(err.resolve()));
+        }
+
+        // Otherwise it's a `respond` rule (load-time validation guarantees one).
+        let respond = rule
+            .respond
+            .as_ref()
+            .expect("rule validated to have respond or error");
 
         // Estimate token counts when the fixture doesn't pin them, so usage
         // looks plausible. A crude word count stands in for tokenization.
-        let usage = match rule.respond.usage {
+        let usage = match respond.usage {
             Some(u) => Usage {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,
             },
             None => Usage {
-                prompt_tokens: req
-                    .messages
-                    .iter()
-                    .map(|m| word_count(&m.content))
-                    .sum(),
-                completion_tokens: word_count(&rule.respond.content),
+                prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
+                completion_tokens: word_count(&respond.content),
             },
         };
 
         // Resolve streaming spec: start from defaults, apply per-rule overrides.
         let mut spec = defaults;
-        if let Some(fs) = &rule.respond.stream {
+        if let Some(fs) = &respond.stream {
             if let Some(t) = fs.ttft_ms {
                 spec.ttft_ms = t;
             }
@@ -193,13 +291,14 @@ impl Fixtures {
             }
         }
 
-        Some(NeutralResponse {
+        Some(Outcome::Respond(NeutralResponse {
             model: req.model.clone(),
-            content: rule.respond.content.clone(),
-            stop_reason: rule.respond.finish_reason.into(),
+            content: respond.content.clone(),
+            stop_reason: respond.finish_reason.into(),
             usage,
             stream: spec,
-        })
+            fault: respond.fault.as_ref().map(|f| f.resolve()),
+        }))
     }
 }
 

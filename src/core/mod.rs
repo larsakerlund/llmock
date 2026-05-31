@@ -116,6 +116,32 @@ impl Default for StreamSpec {
     }
 }
 
+/// A mid-stream fault to inject (only meaningful for streaming responses).
+/// `after` counts content deltas emitted before the fault triggers.
+#[derive(Debug, Clone, Copy)]
+pub enum Fault {
+    /// Emit `after` content deltas, then drop the connection without the final
+    /// chunk or `[DONE]` — simulates a truncated/dropped stream.
+    Truncate { after: usize },
+    /// Emit `after` content deltas, then send a malformed SSE frame and stop —
+    /// exercises a client's parse-error handling.
+    Malformed { after: usize },
+    /// Emit `after` content deltas, then stall for `hold_ms` and stop — exercises
+    /// a client's read timeout.
+    Hang { after: usize, hold_ms: u64 },
+}
+
+/// A provider-neutral HTTP error to inject. Adapters render this into their own
+/// error-envelope shape and status.
+#[derive(Debug, Clone)]
+pub struct InjectError {
+    pub status: u16,
+    pub error_type: String,
+    pub message: String,
+    pub code: Option<String>,
+    pub param: Option<String>,
+}
+
 /// A canned response in neutral form, produced by the fixture engine.
 #[derive(Debug, Clone)]
 pub struct NeutralResponse {
@@ -125,4 +151,14 @@ pub struct NeutralResponse {
     pub usage: Usage,
     /// How this response should stream, if the request asked for streaming.
     pub stream: StreamSpec,
+    /// A mid-stream fault to inject, if any (ignored for non-streaming).
+    pub fault: Option<Fault>,
+}
+
+/// What the fixture engine decided to do with a request: serve a response or
+/// fail with an injected HTTP error.
+#[derive(Debug, Clone)]
+pub enum Outcome {
+    Respond(NeutralResponse),
+    Error(InjectError),
 }

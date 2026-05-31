@@ -13,7 +13,7 @@ then:
 import os
 import sys
 
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI, RateLimitError
 
 BASE_URL = os.environ.get("LLMOCK_BASE_URL", "http://127.0.0.1:8080/v1")
 
@@ -99,6 +99,42 @@ for chunk in stream2:
         text2 += chunk.choices[0].delta.content
 ok &= check("include_usage yields a usage object", usage is not None and usage.total_tokens == 21)
 ok &= check("usage chunk has empty choices, text still complete", text2 == "It's sunny and 22°C with a light breeze.")
+
+# 7. Error injection — the SDK must raise the right typed exception
+try:
+    client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "boom"}],
+    )
+    ok &= check("429 raises RateLimitError", False)
+except RateLimitError as e:
+    ok &= check("429 raises RateLimitError", e.status_code == 429)
+    ok &= check("error envelope code surfaced", e.body.get("code") == "rate_limit_exceeded")
+
+try:
+    client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "unauthorized please"}],
+    )
+    ok &= check("401 raises AuthenticationError", False)
+except AuthenticationError as e:
+    ok &= check("401 raises AuthenticationError", e.status_code == 401)
+
+# 8. Truncate fault — the stream ends without a normal completion. We only
+#    require that some content arrived and the loop terminates (no hang).
+chunks_seen = 0
+try:
+    for _chunk in client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "please truncate this"}],
+        stream=True,
+    ):
+        chunks_seen += 1
+except Exception:
+    # An abrupt mid-stream close may surface as a transport error; that's fine —
+    # the point is the developer can simulate a dropped stream.
+    pass
+ok &= check("truncate fault streamed some chunks then ended", chunks_seen >= 1)
 
 print()
 if ok:

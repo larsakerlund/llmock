@@ -6,8 +6,8 @@ canned fixture responses that look exactly like the real provider — same JSON
 shapes, same streaming wire format, same error envelopes.
 
 > Status: early. Implements **OpenAI Chat Completions** (streaming + non-streaming)
-> with configurable latency, plus the Models endpoints. Error injection and the
-> Anthropic Messages API are on the roadmap below.
+> with configurable latency and error/failure injection, plus the Models
+> endpoints. The Anthropic Messages API and more are on the roadmap below.
 
 ## Why
 
@@ -78,6 +78,42 @@ Server-wide defaults (used when a rule doesn't override) come from flags/env:
 `--default-ttft-ms`, `--default-inter-token-ms`, `--default-chunk-by` — handy for
 applying realistic latency fleet-wide without editing fixtures.
 
+### Error & failure injection
+
+Fixtures are developer-owned: you compose exactly the failure scenarios you need
+to test your app's error handling. A rule can return an HTTP **error** instead of
+a response:
+
+```yaml
+  - match: { user_contains: "boom" }
+    error:
+      status: 429
+      type: rate_limit_error                 # defaults to api_error
+      message: "Rate limit reached for gpt-4o."
+      code: rate_limit_exceeded              # optional
+```
+
+The error is returned with the given status and a faithful provider error
+envelope — for both streaming and non-streaming requests (upfront errors precede
+the stream, as the real API does). The genuine SDK raises the matching typed
+exception (e.g. `RateLimitError`, `AuthenticationError`).
+
+Or stream normally, then misbehave mid-stream with a **fault** (streaming only):
+
+```yaml
+  - match: { user_contains: "truncate" }
+    respond:
+      content: "This response will be cut off partway through the stream."
+      fault:
+        kind: truncate        # truncate | malformed | hang
+        after_tokens: 4       # emit N deltas, then fault (default 1)
+        # hold_ms: 60000      # for kind: hang — stall this long, then give up
+```
+
+- `truncate` — drop the connection after N deltas (no final chunk, no `[DONE]`).
+- `malformed` — emit a broken SSE frame after N deltas (tests parse-error paths).
+- `hang` — stall for `hold_ms` after N deltas (tests client read timeouts).
+
 ## Endpoints (milestone 1)
 
 | Method | Path | Notes |
@@ -121,7 +157,7 @@ faithful. Golden byte-diff tests against captured real responses come next.
 
 - [x] M1 — OpenAI Chat Completions (non-streaming) + Models, fixture engine, SDK-compat test
 - [x] M2 — Streaming (`chat.completion.chunk` SSE, `[DONE]`, `include_usage`) + configurable latency (TTFT, inter-token, chunking)
-- [ ] M3 — Error/failure injection (429/500/timeouts/malformed streams)
+- [x] M3 — Error/failure injection (HTTP errors + mid-stream truncate/malformed/hang faults)
 - [ ] M4 — Tool/function calling (streamed argument fragments)
 - [ ] M5 — Record/replay cassettes (proxy a real API once, replay exactly)
 - [ ] M6 — OpenAI Responses API; per-provider path prefixes (`/openai`, `/anthropic`, …)

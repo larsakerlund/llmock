@@ -6,6 +6,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 
+use crate::core::InjectError;
+
 #[derive(Debug, Serialize)]
 pub struct ErrorEnvelope {
     pub error: ErrorBody,
@@ -59,6 +61,24 @@ impl ApiError {
             "llmock_no_fixture",
             message,
         )
+    }
+
+    /// Render a developer-configured injected error into the OpenAI envelope.
+    /// An unknown/invalid status falls back to 500.
+    pub fn from_inject(err: InjectError) -> Self {
+        let status =
+            StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        ApiError {
+            status,
+            body: ErrorEnvelope {
+                error: ErrorBody {
+                    message: err.message,
+                    error_type: err.error_type,
+                    param: err.param,
+                    code: err.code,
+                },
+            },
+        }
     }
 
     /// A capability llmock has not implemented yet. Kept for endpoints still on

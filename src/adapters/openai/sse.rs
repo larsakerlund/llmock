@@ -19,11 +19,18 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use tokio::time::sleep;
 
-use crate::core::NeutralResponse;
+use crate::core::{Fault, NeutralResponse};
 use crate::stream::{chunk_text, delay};
 use crate::util;
 
 use super::response::{finish_reason_str, Usage};
+
+/// How many content deltas to emit before a fault triggers.
+fn fault_after(f: Fault) -> usize {
+    match f {
+        Fault::Truncate { after } | Fault::Malformed { after } | Fault::Hang { after, .. } => after,
+    }
+}
 
 /// Build the streaming HTTP response for a neutral response.
 pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response {
@@ -36,6 +43,7 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
 
     let pieces = chunk_text(&resp.content, resp.stream.chunk_by);
     let spec = resp.stream;
+    let fault = resp.fault;
     let usage = Usage {
         prompt_tokens: resp.usage.prompt_tokens,
         completion_tokens: resp.usage.completion_tokens,
@@ -58,8 +66,16 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
         };
         yield Ok::<_, Infallible>(frame(&role));
 
-        // 2. content chunks, paced by ttft then inter-token delay
+        // 2. content chunks, paced by ttft then inter-token delay. If a fault is
+        //    configured, stop once `after` deltas have been emitted.
+        let mut triggered: Option<Fault> = None;
         for (i, piece) in pieces.iter().enumerate() {
+            if let Some(f) = fault {
+                if fault_after(f) == i {
+                    triggered = Some(f);
+                    break;
+                }
+            }
             if let Some(d) = delay(if i == 0 { spec.ttft_ms } else { spec.inter_token_ms }) {
                 sleep(d).await;
             }
@@ -74,6 +90,33 @@ pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response 
                 usage: usage_field,
             };
             yield Ok(frame(&chunk));
+        }
+        // A fault whose `after` is at/beyond the content length triggers now.
+        if triggered.is_none() {
+            if let Some(f) = fault {
+                if fault_after(f) >= pieces.len() {
+                    triggered = Some(f);
+                }
+            }
+        }
+
+        if let Some(f) = triggered {
+            // Fault path: misbehave, then end the stream WITHOUT a final chunk or
+            // `[DONE]` — exactly the broken behaviour the developer asked to test.
+            match f {
+                Fault::Truncate { .. } => {}
+                Fault::Malformed { .. } => {
+                    yield Ok(axum::body::Bytes::from_static(
+                        b"data: {\"id\":\"llmock\",\"object\":\"chat.completion.chunk\",\"choices\":[{BROKEN\n\n",
+                    ));
+                }
+                Fault::Hang { hold_ms, .. } => {
+                    if let Some(d) = delay(hold_ms) {
+                        sleep(d).await;
+                    }
+                }
+            }
+            return;
         }
 
         // 3. final chunk: empty delta + finish_reason

@@ -21,6 +21,32 @@ rules:
     respond:
       content: "Mock reply from the gpt-4o-mini fixture."
 
+  # --- Error / failure injection (M3) ---
+
+  - match:
+      user_contains: "boom"            # force a rate-limit error
+    error:
+      status: 429
+      type: rate_limit_error
+      message: "Rate limit reached for gpt-4o in organization org-llmock."
+      code: rate_limit_exceeded
+
+  - match:
+      user_contains: "unauthorized"    # force an auth error
+    error:
+      status: 401
+      type: invalid_request_error
+      message: "Incorrect API key provided."
+      code: invalid_api_key
+
+  - match:
+      user_contains: "truncate"        # stream a few tokens then drop the connection
+    respond:
+      content: "This response will be cut off partway through the stream."
+      fault:
+        kind: truncate
+        after_tokens: 4
+
   - match: {}
     respond:
       content: "This is a default mock response from llmock."
