@@ -6,9 +6,10 @@ canned fixture responses that look exactly like the real provider — same JSON
 shapes, same streaming wire format, same error envelopes.
 
 > Status: early but multi-provider. Implements the **OpenAI Chat Completions**,
-> **OpenAI Responses**, and **Anthropic Messages** APIs (streaming +
-> non-streaming, text + tool calls) with configurable latency and error/failure
-> injection, plus the Models endpoints. One fixture set drives all three.
+> **OpenAI Responses**, **Anthropic Messages**, and **Google Gemini** APIs
+> (streaming + non-streaming, text + tool calls) with configurable latency and
+> error/failure injection, plus the Models endpoints. One fixture set drives all
+> four.
 
 ## Why
 
@@ -145,14 +146,16 @@ fragments).
 | POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
 | POST | `/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. |
 | POST | `/v1/messages` | Anthropic Messages API: `message_start`/`content_block_*`/`message_delta`/`message_stop` streaming and non-streaming; text and tool use. `x-api-key`/`anthropic-version` accepted and ignored. |
+| POST | `/v1beta/models/{model}:generateContent` | Google Gemini: non-streaming `generateContent`. |
+| POST | `/v1beta/models/{model}:streamGenerateContent` | Google Gemini: streaming (`?alt=sse`); text and function calls. |
 | GET  | `/v1/models` | Lists a default model catalogue. |
 | GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
 | GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
 
-The same fixture rules drive `/v1/chat/completions`, `/v1/responses`, and
-`/v1/messages` — author once, test whichever API (and provider) your app calls.
-Point each SDK's `base_url` at llmock: OpenAI → `http://host:8080/v1`,
-Anthropic → `http://host:8080`.
+The same fixture rules drive every endpoint — author once, test whichever API
+(and provider) your app calls. Point each SDK's base URL at llmock: OpenAI →
+`http://host:8080/v1`, Anthropic → `http://host:8080`, Gemini (google-genai) →
+`http://host:8080` via `HttpOptions(base_url=…)`.
 
 ## Architecture
 
@@ -169,6 +172,7 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 - `src/adapters/openai/`         — OpenAI Chat Completions + Models
 - `src/adapters/openai_responses/` — OpenAI Responses API
 - `src/adapters/anthropic/`      — Anthropic Messages API
+- `src/adapters/gemini/`         — Google Gemini API
 - `src/fixtures.rs`              — matching rules
 - `src/stream.rs`               — text chunking + timing
 - `src/util.rs`                 — id/timestamp helpers
@@ -216,8 +220,8 @@ our bytes and yield the expected objects, the format is faithful.
 - [x] M4 — Tool/function calling (non-streaming + streamed argument fragments)
 - [x] M5 — OpenAI Responses API (`/v1/responses`): full `response.*` event lifecycle + non-streaming, text & tool calls
 - [x] M7 — Anthropic Messages API (`/v1/messages`): named-event streaming lifecycle + non-streaming, text & tool use, Anthropic error envelope
+- [x] M8 — Google Gemini API (`generateContent` / `streamGenerateContent`): SSE streaming + non-streaming, text & function calls, Google error envelope
 - [ ] M6 — Record/replay cassettes (proxy a real API once, replay exactly); per-provider path prefixes (`/openai`, `/anthropic`, …)
-- [ ] M8 — Google Gemini API
 
 ## License
 

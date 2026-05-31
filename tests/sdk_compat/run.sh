@@ -13,7 +13,7 @@ VENV="tests/sdk_compat/.venv"
 if [ ! -x "$VENV/bin/python" ]; then
   echo "Creating venv and installing provider SDKs..."
   python3 -m venv "$VENV"
-  "$VENV/bin/pip" -q install --upgrade pip openai anthropic
+  "$VENV/bin/pip" -q install --upgrade pip openai anthropic google-genai
 fi
 
 echo "Building llmock..."
@@ -32,6 +32,7 @@ done
 
 export LLMOCK_BASE_URL="http://127.0.0.1:$PORT/v1"
 export LLMOCK_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
+export LLMOCK_GEMINI_BASE_URL="http://127.0.0.1:$PORT"
 echo
 echo "== OpenAI Chat Completions API =="
 "$VENV/bin/python" tests/sdk_compat/test_openai.py
@@ -41,6 +42,9 @@ echo "== OpenAI Responses API =="
 echo
 echo "== Anthropic Messages API =="
 "$VENV/bin/python" tests/sdk_compat/test_anthropic.py
+echo
+echo "== Google Gemini API =="
+"$VENV/bin/python" tests/sdk_compat/test_gemini.py
 
 echo
 echo "All SDK-compat suites passed."

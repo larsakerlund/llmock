@@ -4,5 +4,6 @@
 //! a provider is a new adapter, not a change to the engine.
 
 pub(crate) mod anthropic;
+pub(crate) mod gemini;
 pub(crate) mod openai;
 pub(crate) mod openai_responses;
