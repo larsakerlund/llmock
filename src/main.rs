@@ -7,6 +7,7 @@ mod adapters;
 mod config;
 mod core;
 mod fixtures;
+mod sse;
 mod state;
 mod stream;
 mod util;

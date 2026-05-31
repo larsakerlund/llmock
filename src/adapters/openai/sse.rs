@@ -12,7 +12,7 @@
 
 use std::convert::Infallible;
 
-use axum::body::Body;
+use axum::body::{Body, Bytes};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use serde::ser::SerializeStruct;
@@ -20,17 +20,15 @@ use serde::{Serialize, Serializer};
 use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
+use crate::sse::{data as frame, execute_fault, fault_after};
 use crate::stream::{chunk_text, delay};
 use crate::util;
 
 use super::response::{finish_reason_str, Usage};
 
-/// How many content deltas to emit before a fault triggers.
-fn fault_after(f: Fault) -> usize {
-    match f {
-        Fault::Truncate { after } | Fault::Malformed { after } | Fault::Hang { after, .. } => after,
-    }
-}
+/// A deliberately broken frame for the `malformed` fault.
+const MALFORMED: &[u8] =
+    b"data: {\"id\":\"llmock\",\"object\":\"chat.completion.chunk\",\"choices\":[{BROKEN\n\n";
 
 /// Build the streaming HTTP response for a neutral response.
 pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response {
@@ -106,18 +104,8 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
         if let Some(f) = triggered {
             // Fault path: misbehave, then end the stream WITHOUT a final chunk or
             // `[DONE]` — exactly the broken behaviour the developer asked to test.
-            match f {
-                Fault::Truncate { .. } => {}
-                Fault::Malformed { .. } => {
-                    yield Ok(axum::body::Bytes::from_static(
-                        b"data: {\"id\":\"llmock\",\"object\":\"chat.completion.chunk\",\"choices\":[{BROKEN\n\n",
-                    ));
-                }
-                Fault::Hang { hold_ms, .. } => {
-                    if let Some(d) = delay(hold_ms) {
-                        sleep(d).await;
-                    }
-                }
+            if let Some(bytes) = execute_fault(f, Bytes::from_static(MALFORMED)).await {
+                yield Ok(bytes);
             }
             return;
         }
@@ -203,7 +191,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
         }
 
         // 5. terminator
-        yield Ok(axum::body::Bytes::from_static(b"data: [DONE]\n\n"));
+        yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
     });
 
     Response::builder()
@@ -213,16 +201,6 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
         .header("connection", "keep-alive")
         .body(body)
         .expect("valid streaming response")
-}
-
-/// Serialize one chunk into an SSE `data:` frame.
-fn frame<T: Serialize>(value: &T) -> axum::body::Bytes {
-    let json = serde_json::to_string(value).expect("chunk serializes");
-    let mut buf = String::with_capacity(json.len() + 8);
-    buf.push_str("data: ");
-    buf.push_str(&json);
-    buf.push_str("\n\n");
-    axum::body::Bytes::from(buf)
 }
 
 /// One `chat.completion.chunk`. `Serialize` is hand-written so the constant

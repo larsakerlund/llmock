@@ -12,6 +12,7 @@ use axum::response::Response;
 use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
+use crate::sse::{data as frame, execute_fault, fault_after};
 use crate::stream::{chunk_text, delay};
 
 use super::response::{
@@ -19,20 +20,8 @@ use super::response::{
     GenerateContentResponse, Part,
 };
 
-fn fault_after(f: Fault) -> usize {
-    match f {
-        Fault::Truncate { after } | Fault::Malformed { after } | Fault::Hang { after, .. } => after,
-    }
-}
-
-fn frame(resp: &GenerateContentResponse) -> Bytes {
-    let json = serde_json::to_string(resp).expect("chunk serializes");
-    let mut buf = String::with_capacity(json.len() + 8);
-    buf.push_str("data: ");
-    buf.push_str(&json);
-    buf.push_str("\n\n");
-    Bytes::from(buf)
-}
+/// A deliberately broken frame for the `malformed` fault.
+const MALFORMED: &[u8] = b"data: {BROKEN\n\n";
 
 fn text_chunk(piece: String, model: &str) -> GenerateContentResponse {
     GenerateContentResponse {
@@ -73,16 +62,11 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
             }
         }
         if let Some(f) = triggered {
-            match f {
-                Fault::Truncate { .. } => {}
-                Fault::Malformed { .. } => {
-                    yield Ok(Bytes::from_static(b"data: {BROKEN\n\n"));
-                }
-                Fault::Hang { hold_ms, .. } => {
-                    if let Some(d) = delay(hold_ms) { sleep(d).await; }
-                }
+            // End the stream without a final (finishReason) chunk.
+            if let Some(bytes) = execute_fault(f, Bytes::from_static(MALFORMED)).await {
+                yield Ok(bytes);
             }
-            return; // end stream without a final (finishReason) chunk
+            return;
         }
 
         // One chunk per function call.

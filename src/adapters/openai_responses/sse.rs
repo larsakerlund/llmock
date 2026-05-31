@@ -25,34 +25,20 @@ use axum::body::{Body, Bytes};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use serde::Serialize;
+use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
+use crate::sse::{event, execute_fault, fault_after};
 use crate::stream::{chunk_text, delay};
 use crate::util;
-use tokio::time::sleep;
 
 use super::response::{
     completed_response, initial_response, FunctionCallItem, MessageItem, OutputItem, OutputText,
     ResponseIds, ResponseObject,
 };
 
-fn fault_after(f: Fault) -> usize {
-    match f {
-        Fault::Truncate { after } | Fault::Malformed { after } | Fault::Hang { after, .. } => after,
-    }
-}
-
-/// Serialize a named SSE event: `event: <name>\ndata: <json>\n\n`.
-fn event<T: Serialize>(name: &str, payload: &T) -> Bytes {
-    let json = serde_json::to_string(payload).expect("event serializes");
-    let mut buf = String::with_capacity(name.len() + json.len() + 16);
-    buf.push_str("event: ");
-    buf.push_str(name);
-    buf.push_str("\ndata: ");
-    buf.push_str(&json);
-    buf.push_str("\n\n");
-    Bytes::from(buf)
-}
+/// A deliberately broken frame for the `malformed` fault.
+const MALFORMED: &[u8] = b"event: response.output_text.delta\ndata: {BROKEN\n\n";
 
 pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
     let created_at = util::unix_now();
@@ -126,18 +112,11 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
                 }
             }
             if let Some(f) = triggered {
-                match f {
-                    Fault::Truncate { .. } => {}
-                    Fault::Malformed { .. } => {
-                        yield Ok(Bytes::from_static(
-                            b"event: response.output_text.delta\ndata: {BROKEN\n\n",
-                        ));
-                    }
-                    Fault::Hang { hold_ms, .. } => {
-                        if let Some(d) = delay(hold_ms) { sleep(d).await; }
-                    }
+                // End the stream without response.completed.
+                if let Some(bytes) = execute_fault(f, Bytes::from_static(MALFORMED)).await {
+                    yield Ok(bytes);
                 }
-                return; // end stream without response.completed
+                return;
             }
 
             // output_text.done / content_part.done / output_item.done (completed)
