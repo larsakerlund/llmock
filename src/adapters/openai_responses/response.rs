@@ -14,7 +14,7 @@ use crate::util;
 /// inspected `status`/`usage`; optional fields we don't model are emitted as
 /// null/empty so the SDK validates them.
 #[derive(Debug, Serialize)]
-pub struct ResponseObject {
+pub(crate) struct ResponseObject {
     pub id: String,
     pub object: &'static str,
     pub created_at: u64,
@@ -36,13 +36,13 @@ pub struct ResponseObject {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
-pub enum OutputItem {
+pub(crate) enum OutputItem {
     Message(MessageItem),
     FunctionCall(FunctionCallItem),
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct MessageItem {
+pub(crate) struct MessageItem {
     pub id: String,
     #[serde(rename = "type")]
     pub item_type: &'static str, // "message"
@@ -52,7 +52,7 @@ pub struct MessageItem {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct OutputText {
+pub(crate) struct OutputText {
     #[serde(rename = "type")]
     pub part_type: &'static str, // "output_text"
     pub text: String,
@@ -60,7 +60,7 @@ pub struct OutputText {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FunctionCallItem {
+pub(crate) struct FunctionCallItem {
     pub id: String,
     #[serde(rename = "type")]
     pub item_type: &'static str, // "function_call"
@@ -71,7 +71,7 @@ pub struct FunctionCallItem {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct Usage {
+pub(crate) struct Usage {
     pub input_tokens: u32,
     pub input_tokens_details: InputTokensDetails,
     pub output_tokens: u32,
@@ -80,25 +80,25 @@ pub struct Usage {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct InputTokensDetails {
+pub(crate) struct InputTokensDetails {
     pub cached_tokens: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct OutputTokensDetails {
+pub(crate) struct OutputTokensDetails {
     pub reasoning_tokens: u32,
 }
 
 /// Stable ids for one response, shared between the items and the streaming
 /// events that reference them.
-pub struct ResponseIds {
+pub(crate) struct ResponseIds {
     pub response_id: String,
     /// One item id per output item, in order.
     pub item_ids: Vec<String>,
 }
 
 impl ResponseIds {
-    pub fn for_response(resp: &NeutralResponse) -> Self {
+    pub(crate) fn for_response(resp: &NeutralResponse) -> Self {
         let mut item_ids = Vec::new();
         // A text message item (if any content) comes first.
         if !resp.content.is_empty() || resp.tool_calls.is_empty() {
@@ -114,26 +114,28 @@ impl ResponseIds {
     }
 }
 
-pub fn usage_for(resp: &NeutralResponse) -> Usage {
+pub(crate) fn usage_for(resp: &NeutralResponse) -> Usage {
     Usage {
         input_tokens: resp.usage.prompt_tokens,
         input_tokens_details: InputTokensDetails { cached_tokens: 0 },
         output_tokens: resp.usage.completion_tokens,
-        output_tokens_details: OutputTokensDetails { reasoning_tokens: 0 },
+        output_tokens_details: OutputTokensDetails {
+            reasoning_tokens: 0,
+        },
         total_tokens: resp.usage.total(),
     }
 }
 
 /// Build the ordered output items for a response: an optional text message item
 /// followed by one function-call item per tool call.
-pub fn output_items(resp: &NeutralResponse, ids: &ResponseIds) -> Vec<OutputItem> {
+pub(crate) fn output_items(resp: &NeutralResponse, ids: &ResponseIds) -> Vec<OutputItem> {
     let mut items = Vec::new();
-    let mut idx = 0;
+    let mut item_pos = 0;
 
     let has_message = !resp.content.is_empty() || resp.tool_calls.is_empty();
     if has_message {
         items.push(OutputItem::Message(MessageItem {
-            id: ids.item_ids[idx].clone(),
+            id: ids.item_ids[item_pos].clone(),
             item_type: "message",
             status: "completed",
             role: "assistant",
@@ -143,19 +145,19 @@ pub fn output_items(resp: &NeutralResponse, ids: &ResponseIds) -> Vec<OutputItem
                 annotations: Vec::new(),
             }],
         }));
-        idx += 1;
+        item_pos += 1;
     }
 
     for tc in &resp.tool_calls {
         items.push(OutputItem::FunctionCall(FunctionCallItem {
-            id: ids.item_ids[idx].clone(),
+            id: ids.item_ids[item_pos].clone(),
             item_type: "function_call",
             status: "completed",
             call_id: tc.id.clone(),
             name: tc.name.clone(),
             arguments: tc.arguments.clone(),
         }));
-        idx += 1;
+        item_pos += 1;
     }
 
     items
@@ -163,7 +165,11 @@ pub fn output_items(resp: &NeutralResponse, ids: &ResponseIds) -> Vec<OutputItem
 
 /// Build the initial (`in_progress`, empty output, no usage) response object
 /// embedded in the `response.created` / `response.in_progress` stream events.
-pub fn initial_response(resp: &NeutralResponse, ids: &ResponseIds, created_at: u64) -> ResponseObject {
+pub(crate) fn initial_response(
+    resp: &NeutralResponse,
+    ids: &ResponseIds,
+    created_at: u64,
+) -> ResponseObject {
     ResponseObject {
         id: ids.response_id.clone(),
         object: "response",
@@ -186,7 +192,7 @@ pub fn initial_response(resp: &NeutralResponse, ids: &ResponseIds, created_at: u
 
 /// Build the full (completed) response object (non-streaming path, and the
 /// object embedded in the streaming `response.completed` event).
-pub fn completed_response(
+pub(crate) fn completed_response(
     resp: &NeutralResponse,
     ids: &ResponseIds,
     created_at: u64,

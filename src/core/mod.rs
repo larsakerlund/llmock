@@ -7,7 +7,7 @@
 
 /// A single chat turn, provider-agnostic.
 #[derive(Debug, Clone)]
-pub struct Message {
+pub(crate) struct Message {
     pub role: String,
     /// Flattened text content. (Multimodal/content-parts come later.)
     pub content: String,
@@ -16,7 +16,7 @@ pub struct Message {
 /// What an adapter extracted from an incoming request that the fixture engine
 /// can match against. Intentionally small for the MVP; grows as needed.
 #[derive(Debug, Clone)]
-pub struct NeutralRequest {
+pub(crate) struct NeutralRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub stream: bool,
@@ -29,7 +29,7 @@ pub struct NeutralRequest {
 
 impl NeutralRequest {
     /// The text of the last user message, if any — the most common match key.
-    pub fn last_user_message(&self) -> Option<&str> {
+    pub(crate) fn last_user_message(&self) -> Option<&str> {
         self.messages
             .iter()
             .rev()
@@ -41,7 +41,7 @@ impl NeutralRequest {
 /// Why generation stopped, in neutral terms. Adapters map these to their own
 /// vocabulary (OpenAI `finish_reason`, Anthropic `stop_reason`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StopReason {
+pub(crate) enum StopReason {
     /// Natural end of turn.
     Stop,
     /// Hit the max token limit.
@@ -54,20 +54,20 @@ pub enum StopReason {
 
 /// Token accounting. Adapters render this into their own usage object.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Usage {
+pub(crate) struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
 }
 
 impl Usage {
-    pub fn total(&self) -> u32 {
+    pub(crate) fn total(self) -> u32 {
         self.prompt_tokens + self.completion_tokens
     }
 }
 
 /// How to split response text into streamed pieces.
 #[derive(Debug, Clone, Copy)]
-pub enum ChunkBy {
+pub(crate) enum ChunkBy {
     /// One delta per whitespace-delimited word (whitespace kept with the word).
     Word,
     /// One delta per character.
@@ -79,7 +79,7 @@ pub enum ChunkBy {
 impl ChunkBy {
     /// Parse from a config string: `word`, `char`, or a positive integer
     /// (characters per chunk).
-    pub fn parse(s: &str) -> Result<ChunkBy, String> {
+    pub(crate) fn parse(s: &str) -> Result<ChunkBy, String> {
         match s.trim().to_ascii_lowercase().as_str() {
             "word" => Ok(ChunkBy::Word),
             "char" | "character" => Ok(ChunkBy::Char),
@@ -89,7 +89,9 @@ impl ChunkBy {
                 .filter(|n| *n > 0)
                 .map(ChunkBy::Chars)
                 .ok_or_else(|| {
-                    format!("invalid chunk_by {s:?} (expected `word`, `char`, or a positive integer)")
+                    format!(
+                        "invalid chunk_by {s:?} (expected `word`, `char`, or a positive integer)"
+                    )
                 }),
         }
     }
@@ -98,7 +100,7 @@ impl ChunkBy {
 /// Provider-neutral streaming behaviour: how fast and in what granularity to
 /// emit deltas. Applies to any adapter's streaming serializer.
 #[derive(Debug, Clone, Copy)]
-pub struct StreamSpec {
+pub(crate) struct StreamSpec {
     /// Delay before the first content delta (time-to-first-token), in ms.
     pub ttft_ms: u64,
     /// Delay between subsequent content deltas, in ms.
@@ -119,7 +121,7 @@ impl Default for StreamSpec {
 /// A mid-stream fault to inject (only meaningful for streaming responses).
 /// `after` counts content deltas emitted before the fault triggers.
 #[derive(Debug, Clone, Copy)]
-pub enum Fault {
+pub(crate) enum Fault {
     /// Emit `after` content deltas, then drop the connection without the final
     /// chunk or `[DONE]` — simulates a truncated/dropped stream.
     Truncate { after: usize },
@@ -134,7 +136,7 @@ pub enum Fault {
 /// A provider-neutral HTTP error to inject. Adapters render this into their own
 /// error-envelope shape and status.
 #[derive(Debug, Clone)]
-pub struct InjectError {
+pub(crate) struct InjectError {
     pub status: u16,
     pub error_type: String,
     pub message: String,
@@ -145,7 +147,7 @@ pub struct InjectError {
 /// A function/tool call the assistant "made". `arguments` is the JSON arguments
 /// as a string (exactly how the providers represent it on the wire).
 #[derive(Debug, Clone)]
-pub struct ToolCall {
+pub(crate) struct ToolCall {
     pub id: String,
     pub name: String,
     pub arguments: String,
@@ -153,7 +155,7 @@ pub struct ToolCall {
 
 /// A canned response in neutral form, produced by the fixture engine.
 #[derive(Debug, Clone)]
-pub struct NeutralResponse {
+pub(crate) struct NeutralResponse {
     pub model: String,
     pub content: String,
     /// Tool calls the assistant returns. When non-empty, `content` is typically
@@ -170,7 +172,7 @@ pub struct NeutralResponse {
 /// What the fixture engine decided to do with a request: serve a response or
 /// fail with an injected HTTP error.
 #[derive(Debug, Clone)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     Respond(NeutralResponse),
     Error(InjectError),
 }

@@ -10,7 +10,7 @@ use crate::core::ChunkBy;
 ///
 /// `Word` keeps each word's trailing whitespace attached so concatenating the
 /// pieces reproduces the original text exactly (no lost or doubled spaces).
-pub fn chunk_text(content: &str, chunk_by: ChunkBy) -> Vec<String> {
+pub(crate) fn chunk_text(content: &str, chunk_by: ChunkBy) -> Vec<String> {
     match chunk_by {
         ChunkBy::Char => content.chars().map(|c| c.to_string()).collect(),
         ChunkBy::Chars(n) => {
@@ -49,7 +49,7 @@ fn split_keeping_whitespace(s: &str) -> Vec<String> {
 }
 
 /// Duration helper that treats 0 as "no delay" (skips the sleep entirely).
-pub fn delay(ms: u64) -> Option<Duration> {
+pub(crate) fn delay(ms: u64) -> Option<Duration> {
     if ms == 0 {
         None
     } else {

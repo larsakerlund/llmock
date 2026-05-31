@@ -16,13 +16,13 @@ use crate::core::{
 use crate::util;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Fixtures {
+pub(crate) struct Fixtures {
     #[serde(default)]
     pub rules: Vec<Rule>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Rule {
+pub(crate) struct Rule {
     #[serde(default, rename = "match")]
     pub match_: Match,
     /// Serve a (possibly streaming) response. Required unless `error` is set.
@@ -36,7 +36,7 @@ pub struct Rule {
 /// Conditions to test against a request. All present conditions must hold
 /// (logical AND). Absent conditions are ignored.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Match {
+pub(crate) struct Match {
     /// Exact model name.
     pub model: Option<String>,
     /// Substring that must appear in the last user message.
@@ -44,7 +44,7 @@ pub struct Match {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Respond {
+pub(crate) struct Respond {
     #[serde(default)]
     pub content: String,
     /// Tool/function calls to return. When present, `finish_reason` defaults to
@@ -69,7 +69,7 @@ pub struct Respond {
 /// as a YAML mapping (which is serialized to a compact JSON string). `id` is
 /// generated if omitted.
 #[derive(Debug, Clone, Deserialize)]
-pub struct FixtureToolCall {
+pub(crate) struct FixtureToolCall {
     pub name: String,
     #[serde(default)]
     pub arguments: Option<Args>,
@@ -80,7 +80,7 @@ pub struct FixtureToolCall {
 /// `arguments` accepts either a ready-made JSON string or a structured mapping.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-pub enum Args {
+pub(crate) enum Args {
     /// Used verbatim as the arguments JSON string.
     Str(String),
     /// Any structured YAML value, serialized to a compact JSON string.
@@ -104,8 +104,7 @@ impl FixtureToolCall {
             arguments: self
                 .arguments
                 .as_ref()
-                .map(|a| a.to_json_string())
-                .unwrap_or_else(|| "{}".to_string()),
+                .map_or_else(|| "{}".to_string(), Args::to_json_string),
         }
     }
 }
@@ -113,7 +112,7 @@ impl FixtureToolCall {
 /// An injected HTTP error. `status` and `message` are required; `type` defaults
 /// to a generic `api_error`.
 #[derive(Debug, Clone, Deserialize)]
-pub struct FixtureError {
+pub(crate) struct FixtureError {
     pub status: u16,
     #[serde(default = "default_error_type", rename = "type")]
     pub error_type: String,
@@ -131,7 +130,7 @@ fn default_error_type() -> String {
 /// A mid-stream fault. `after_tokens` is how many content deltas to emit before
 /// the fault triggers (default 1).
 #[derive(Debug, Clone, Deserialize)]
-pub struct FixtureFault {
+pub(crate) struct FixtureFault {
     pub kind: FaultKind,
     #[serde(default)]
     pub after_tokens: Option<usize>,
@@ -142,7 +141,7 @@ pub struct FixtureFault {
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FaultKind {
+pub(crate) enum FaultKind {
     Truncate,
     Malformed,
     Hang,
@@ -177,7 +176,7 @@ impl FixtureError {
 /// Per-rule streaming overrides. Each field is optional; absent fields inherit
 /// the global defaults.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct FixtureStream {
+pub(crate) struct FixtureStream {
     pub ttft_ms: Option<u64>,
     pub inter_token_ms: Option<u64>,
     pub chunk_by: Option<ChunkByConfig>,
@@ -186,7 +185,7 @@ pub struct FixtureStream {
 /// `chunk_by` in YAML may be a string (`word`/`char`) or a number (chars/chunk).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-pub enum ChunkByConfig {
+pub(crate) enum ChunkByConfig {
     Named(String),
     Size(usize),
 }
@@ -202,7 +201,7 @@ impl ChunkByConfig {
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FinishReason {
+pub(crate) enum FinishReason {
     #[default]
     Stop,
     Length,
@@ -222,7 +221,7 @@ impl From<FinishReason> for StopReason {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
-pub struct FixtureUsage {
+pub(crate) struct FixtureUsage {
     #[serde(default)]
     pub prompt_tokens: u32,
     #[serde(default)]
@@ -249,11 +248,11 @@ impl Match {
 impl Fixtures {
     /// Load fixtures from a YAML file, validating `chunk_by` values up front so
     /// a bad config fails at startup rather than mid-request.
-    pub fn load(path: &Path) -> Result<Self, String> {
+    pub(crate) fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("reading {}: {e}", path.display()))?;
-        let fixtures: Fixtures = serde_yaml::from_str(&text)
-            .map_err(|e| format!("parsing {}: {e}", path.display()))?;
+        let fixtures: Fixtures =
+            serde_yaml::from_str(&text).map_err(|e| format!("parsing {}: {e}", path.display()))?;
         for (i, rule) in fixtures.rules.iter().enumerate() {
             // Each rule must do exactly one thing.
             match (&rule.respond, &rule.error) {
@@ -284,7 +283,7 @@ impl Fixtures {
     }
 
     /// A sensible built-in fixture set so the server is useful with no config.
-    pub fn builtin_default() -> Self {
+    pub(crate) fn builtin_default() -> Self {
         Fixtures {
             rules: vec![Rule {
                 match_: Match::default(),
@@ -304,7 +303,11 @@ impl Fixtures {
     /// Find the first matching rule and turn it into an [`Outcome`].
     /// `defaults` supplies streaming timing/granularity for any field a rule
     /// does not override. Returns `None` if nothing matched.
-    pub fn outcome_for(&self, req: &NeutralRequest, defaults: StreamSpec) -> Option<Outcome> {
+    pub(crate) fn outcome_for(
+        &self,
+        req: &NeutralRequest,
+        defaults: StreamSpec,
+    ) -> Option<Outcome> {
         let rule = self.rules.iter().find(|r| r.match_.matches(req))?;
 
         // An `error` rule short-circuits to an injected HTTP error.
@@ -318,25 +321,28 @@ impl Fixtures {
             .as_ref()
             .expect("rule validated to have respond or error");
 
-        let tool_calls: Vec<ToolCall> = respond.tool_calls.iter().map(|t| t.resolve()).collect();
+        let tool_calls: Vec<ToolCall> = respond
+            .tool_calls
+            .iter()
+            .map(FixtureToolCall::resolve)
+            .collect();
 
         // Estimate token counts when the fixture doesn't pin them, so usage
         // looks plausible. A crude word count stands in for tokenization.
-        let usage = match respond.usage {
-            Some(u) => Usage {
+        let usage = if let Some(u) = respond.usage {
+            Usage {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,
-            },
-            None => {
-                let completion: u32 = word_count(&respond.content)
-                    + tool_calls
-                        .iter()
-                        .map(|t| word_count(&t.arguments) + 1)
-                        .sum::<u32>();
-                Usage {
-                    prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
-                    completion_tokens: completion,
-                }
+            }
+        } else {
+            let completion: u32 = word_count(&respond.content)
+                + tool_calls
+                    .iter()
+                    .map(|t| word_count(&t.arguments) + 1)
+                    .sum::<u32>();
+            Usage {
+                prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
+                completion_tokens: completion,
             }
         };
 
@@ -370,7 +376,7 @@ impl Fixtures {
             stop_reason,
             usage,
             stream: spec,
-            fault: respond.fault.as_ref().map(|f| f.resolve()),
+            fault: respond.fault.as_ref().map(FixtureFault::resolve),
         }))
     }
 }

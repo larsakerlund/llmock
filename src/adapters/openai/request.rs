@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::core::{Message, NeutralRequest};
 
 #[derive(Debug, Deserialize)]
-pub struct ChatCompletionRequest {
+pub(crate) struct ChatCompletionRequest {
     pub model: String,
     #[serde(default)]
     pub messages: Vec<ChatMessage>,
@@ -16,7 +16,7 @@ pub struct ChatCompletionRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ChatMessage {
+pub(crate) struct ChatMessage {
     pub role: String,
     /// OpenAI allows `content` to be a string or an array of content parts.
     /// For the MVP we accept either and flatten to text.
@@ -25,7 +25,7 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct StreamOptions {
+pub(crate) struct StreamOptions {
     #[serde(default)]
     pub include_usage: bool,
 }
@@ -33,7 +33,7 @@ pub struct StreamOptions {
 /// `content` is either a bare string or an array of `{type, text}` parts.
 #[derive(Debug, Deserialize, Default)]
 #[serde(untagged)]
-pub enum Content {
+pub(crate) enum Content {
     #[default]
     Null,
     Text(String),
@@ -41,14 +41,14 @@ pub enum Content {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ContentPart {
+pub(crate) struct ContentPart {
     #[serde(default)]
     pub text: String,
 }
 
 impl Content {
     /// Collapse string or content-parts into plain text.
-    pub fn flatten(&self) -> String {
+    pub(crate) fn flatten(&self) -> String {
         match self {
             Content::Null => String::new(),
             Content::Text(s) => s.clone(),
@@ -62,12 +62,11 @@ impl Content {
 }
 
 impl ChatCompletionRequest {
-    pub fn into_neutral(self) -> NeutralRequest {
+    pub(crate) fn into_neutral(self) -> NeutralRequest {
         let include_usage = self
             .stream_options
             .as_ref()
-            .map(|o| o.include_usage)
-            .unwrap_or(false);
+            .is_some_and(|o| o.include_usage);
 
         NeutralRequest {
             model: self.model,

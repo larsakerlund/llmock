@@ -43,9 +43,13 @@ fn event<T: Serialize>(name: &str, payload: &T) -> Bytes {
     Bytes::from(buf)
 }
 
-pub fn stream_response(resp: &NeutralResponse) -> Response {
+pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
     let id = util::anthropic_message_id();
-    let tool_ids: Vec<String> = resp.tool_calls.iter().map(|_| util::tool_use_id()).collect();
+    let tool_ids: Vec<String> = resp
+        .tool_calls
+        .iter()
+        .map(|_| util::tool_use_id())
+        .collect();
     let resp = resp.clone();
     let spec = resp.stream;
     let fault = resp.fault;
@@ -126,7 +130,7 @@ pub fn stream_response(resp: &NeutralResponse) -> Response {
                     block_type: "tool_use",
                     id: tool_ids[t].clone(),
                     name: tc.name.clone(),
-                    input: Value::Object(Default::default()), // empty; filled via deltas
+                    input: Value::Object(serde_json::Map::new()), // empty; filled via deltas
                 }),
             }));
             if !emitted_ping {

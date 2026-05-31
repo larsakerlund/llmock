@@ -6,7 +6,7 @@ use crate::adapters::openai::request::Content;
 use crate::core::{Message, NeutralRequest};
 
 #[derive(Debug, Deserialize)]
-pub struct MessagesRequest {
+pub(crate) struct MessagesRequest {
     pub model: String,
     #[serde(default)]
     pub messages: Vec<AnthropicMessage>,
@@ -20,14 +20,14 @@ pub struct MessagesRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AnthropicMessage {
+pub(crate) struct AnthropicMessage {
     pub role: String,
     #[serde(default)]
     pub content: Content,
 }
 
 impl MessagesRequest {
-    pub fn into_neutral(self) -> NeutralRequest {
+    pub(crate) fn into_neutral(self) -> NeutralRequest {
         let mut messages = Vec::new();
 
         let system = self.system.flatten();

@@ -11,7 +11,7 @@ use crate::core::{NeutralResponse, StopReason};
 use crate::util;
 
 #[derive(Debug, Serialize)]
-pub struct ChatCompletion {
+pub(crate) struct ChatCompletion {
     pub id: String,
     pub object: &'static str,
     pub created: u64,
@@ -22,7 +22,7 @@ pub struct ChatCompletion {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Choice {
+pub(crate) struct Choice {
     pub index: u32,
     pub message: ResponseMessage,
     pub logprobs: Option<()>,
@@ -30,7 +30,7 @@ pub struct Choice {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ResponseMessage {
+pub(crate) struct ResponseMessage {
     pub role: &'static str,
     /// `null` on the wire when the assistant only made tool calls.
     pub content: Option<String>,
@@ -40,7 +40,7 @@ pub struct ResponseMessage {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ToolCallOut {
+pub(crate) struct ToolCallOut {
     pub id: String,
     #[serde(rename = "type")]
     pub call_type: &'static str,
@@ -48,20 +48,20 @@ pub struct ToolCallOut {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FunctionOut {
+pub(crate) struct FunctionOut {
     pub name: String,
     pub arguments: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct Usage {
+pub(crate) struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
 
 /// Map a neutral stop reason to OpenAI's `finish_reason` vocabulary.
-pub fn finish_reason_str(stop: StopReason) -> &'static str {
+pub(crate) fn finish_reason_str(stop: StopReason) -> &'static str {
     match stop {
         StopReason::Stop => "stop",
         StopReason::Length => "length",
@@ -71,7 +71,7 @@ pub fn finish_reason_str(stop: StopReason) -> &'static str {
 }
 
 impl ChatCompletion {
-    pub fn from_neutral(resp: &NeutralResponse) -> Self {
+    pub(crate) fn from_neutral(resp: &NeutralResponse) -> Self {
         ChatCompletion {
             id: util::completion_id(),
             object: "chat.completion",

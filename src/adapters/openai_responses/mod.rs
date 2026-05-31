@@ -5,9 +5,9 @@
 //! from the Chat Completions adapter. One fixture rule therefore serves both
 //! APIs.
 
-pub mod request;
-pub mod response;
-pub mod sse;
+pub(crate) mod request;
+pub(crate) mod response;
+pub(crate) mod sse;
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
@@ -20,7 +20,7 @@ use crate::state::AppState;
 use request::ResponsesRequest;
 use response::{completed_response, ResponseIds};
 
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/responses", post(responses))
 }
 

@@ -10,26 +10,26 @@ use serde::Serialize;
 use crate::core::InjectError;
 
 #[derive(Debug, Serialize)]
-pub struct ErrorEnvelope {
+pub(crate) struct ErrorEnvelope {
     #[serde(rename = "type")]
     pub envelope_type: &'static str, // "error"
     pub error: ErrorBody,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ErrorBody {
+pub(crate) struct ErrorBody {
     #[serde(rename = "type")]
     pub error_type: String,
     pub message: String,
 }
 
-pub struct ApiError {
+pub(crate) struct ApiError {
     pub status: StatusCode,
     pub body: ErrorEnvelope,
 }
 
 impl ApiError {
-    pub fn new(
+    pub(crate) fn new(
         status: StatusCode,
         error_type: impl Into<String>,
         message: impl Into<String>,
@@ -46,20 +46,23 @@ impl ApiError {
         }
     }
 
-    pub fn invalid_request(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
         ApiError::new(StatusCode::BAD_REQUEST, "invalid_request_error", message)
     }
 
     /// llmock could not find a fixture — flagged distinctly; not a real API error.
-    pub fn no_fixture(message: impl Into<String>) -> Self {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "llmock_no_fixture", message)
+    pub(crate) fn no_fixture(message: impl Into<String>) -> Self {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "llmock_no_fixture",
+            message,
+        )
     }
 
     /// Render a developer-configured injected error into the Anthropic envelope.
     /// (`code`/`param` from the fixture are OpenAI-specific and ignored here.)
-    pub fn from_inject(err: InjectError) -> Self {
-        let status =
-            StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    pub(crate) fn from_inject(err: InjectError) -> Self {
+        let status = StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         ApiError::new(status, err.error_type, err.message)
     }
 }

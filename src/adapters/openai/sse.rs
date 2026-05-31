@@ -33,7 +33,7 @@ fn fault_after(f: Fault) -> usize {
 }
 
 /// Build the streaming HTTP response for a neutral response.
-pub fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response {
+pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Response {
     // Stable across all chunks of one response, as the real API does.
     let id = util::completion_id();
     let created = util::unix_now();

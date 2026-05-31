@@ -54,7 +54,7 @@ fn event<T: Serialize>(name: &str, payload: &T) -> Bytes {
     Bytes::from(buf)
 }
 
-pub fn stream_response(resp: &NeutralResponse) -> Response {
+pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
     let created_at = util::unix_now();
     let ids = ResponseIds::for_response(resp);
     let initial = initial_response(resp, &ids, created_at);

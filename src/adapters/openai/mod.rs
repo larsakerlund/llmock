@@ -1,11 +1,11 @@
 //! OpenAI protocol adapter: routes, request parsing, and response
 //! serialization for the Chat Completions and Models endpoints.
 
-pub mod error;
-pub mod models;
-pub mod request;
-pub mod response;
-pub mod sse;
+pub(crate) mod error;
+pub(crate) mod models;
+pub(crate) mod request;
+pub(crate) mod response;
+pub(crate) mod sse;
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
@@ -19,7 +19,7 @@ use request::ChatCompletionRequest;
 use response::ChatCompletion;
 
 /// All OpenAI endpoints, mounted under `/v1`.
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/models", get(models::list_models))
@@ -56,4 +56,3 @@ async fn chat_completions(
         Ok(Json(ChatCompletion::from_neutral(&resp)).into_response())
     }
 }
-

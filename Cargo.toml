@@ -22,3 +22,28 @@ async-stream = "0.3"
 opt-level = 3
 lto = "thin"
 strip = true
+
+# Strict linting. `clippy::all` and `clippy::pedantic` are denied so style
+# issues, bugs, and slop fail the build; a small allow-list silences lints that
+# are noise rather than signal for this codebase. CI runs `cargo clippy
+# --all-targets` and `cargo fmt --check`.
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+# Long, sequential SSE serializers read better as one function than split up.
+too_many_lines = "allow"
+# Adapter types intentionally echo their module (e.g. responses::ResponsesRequest).
+module_name_repetitions = "allow"
+# Flags proper nouns (OpenAI, TTFT, SSE) in docs as needing backticks.
+doc_markdown = "allow"
+# We don't document every fallible/panicking fn's error/panic conditions.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Token counts and content-block indices are small and bounded.
+cast_possible_truncation = "allow"
+# Usage-style structs mirror the wire shape (input_tokens/output_tokens/…).
+struct_field_names = "allow"

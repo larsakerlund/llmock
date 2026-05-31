@@ -6,10 +6,10 @@
 //! ignores). It reuses the neutral core, fixture engine, latency, and fault
 //! injection unchanged — so one fixture serves OpenAI and Anthropic alike.
 
-pub mod error;
-pub mod request;
-pub mod response;
-pub mod sse;
+pub(crate) mod error;
+pub(crate) mod request;
+pub(crate) mod response;
+pub(crate) mod sse;
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
@@ -23,7 +23,7 @@ use error::ApiError;
 use request::MessagesRequest;
 use response::{message_object, tool_use_ids};
 
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/messages", post(messages))
 }
 

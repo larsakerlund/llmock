@@ -9,7 +9,7 @@ use crate::core::{NeutralResponse, StopReason};
 use crate::util;
 
 #[derive(Debug, Serialize)]
-pub struct MessageObject {
+pub(crate) struct MessageObject {
     pub id: String,
     #[serde(rename = "type")]
     pub message_type: &'static str, // "message"
@@ -23,20 +23,20 @@ pub struct MessageObject {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
-pub enum ContentBlock {
+pub(crate) enum ContentBlock {
     Text(TextBlock),
     ToolUse(ToolUseBlock),
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct TextBlock {
+pub(crate) struct TextBlock {
     #[serde(rename = "type")]
     pub block_type: &'static str, // "text"
     pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ToolUseBlock {
+pub(crate) struct ToolUseBlock {
     #[serde(rename = "type")]
     pub block_type: &'static str, // "tool_use"
     pub id: String,
@@ -45,13 +45,13 @@ pub struct ToolUseBlock {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct Usage {
+pub(crate) struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
 }
 
 /// Map a neutral stop reason to Anthropic's vocabulary.
-pub fn stop_reason_str(stop: StopReason) -> &'static str {
+pub(crate) fn stop_reason_str(stop: StopReason) -> &'static str {
     match stop {
         StopReason::Stop => "end_turn",
         StopReason::Length => "max_tokens",
@@ -62,19 +62,22 @@ pub fn stop_reason_str(stop: StopReason) -> &'static str {
 
 /// Parse tool-call arguments (a JSON string) into a JSON value for the
 /// `tool_use.input` field. Falls back to an empty object.
-pub fn parse_input(arguments: &str) -> Value {
-    serde_json::from_str(arguments).unwrap_or_else(|_| Value::Object(Default::default()))
+pub(crate) fn parse_input(arguments: &str) -> Value {
+    serde_json::from_str(arguments).unwrap_or_else(|_| Value::Object(serde_json::Map::new()))
 }
 
 /// Stable ids for the content blocks of one response (tool_use ids), so the
 /// non-streaming message and the streamed blocks agree.
-pub fn tool_use_ids(resp: &NeutralResponse) -> Vec<String> {
-    resp.tool_calls.iter().map(|_| util::tool_use_id()).collect()
+pub(crate) fn tool_use_ids(resp: &NeutralResponse) -> Vec<String> {
+    resp.tool_calls
+        .iter()
+        .map(|_| util::tool_use_id())
+        .collect()
 }
 
 /// Build the ordered content blocks: a text block (if any content) followed by
 /// one tool_use block per tool call.
-pub fn content_blocks(resp: &NeutralResponse, tool_ids: &[String]) -> Vec<ContentBlock> {
+pub(crate) fn content_blocks(resp: &NeutralResponse, tool_ids: &[String]) -> Vec<ContentBlock> {
     let mut blocks = Vec::new();
     if !resp.content.is_empty() {
         blocks.push(ContentBlock::Text(TextBlock {
@@ -93,7 +96,11 @@ pub fn content_blocks(resp: &NeutralResponse, tool_ids: &[String]) -> Vec<Conten
     blocks
 }
 
-pub fn message_object(resp: &NeutralResponse, id: &str, tool_ids: &[String]) -> MessageObject {
+pub(crate) fn message_object(
+    resp: &NeutralResponse,
+    id: &str,
+    tool_ids: &[String],
+) -> MessageObject {
     MessageObject {
         id: id.to_string(),
         message_type: "message",

@@ -32,8 +32,8 @@ async fn main() {
 
     let config = Config::parse();
 
-    let fixtures = match &config.fixtures {
-        Some(path) => match Fixtures::load(path) {
+    let fixtures = if let Some(path) = &config.fixtures {
+        match Fixtures::load(path) {
             Ok(f) => {
                 tracing::info!("loaded fixtures from {}", path.display());
                 f
@@ -42,11 +42,10 @@ async fn main() {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
-        },
-        None => {
-            tracing::info!("no fixtures file given; using built-in default fixture");
-            Fixtures::builtin_default()
         }
+    } else {
+        tracing::info!("no fixtures file given; using built-in default fixture");
+        Fixtures::builtin_default()
     };
 
     let stream_defaults = config.stream_defaults().unwrap_or_else(|e| {
@@ -72,9 +71,7 @@ async fn main() {
         });
 
     tracing::info!("llmock listening on http://{addr}");
-    axum::serve(listener, app)
-        .await
-        .expect("server error");
+    axum::serve(listener, app).await.expect("server error");
 }
 
 /// Liveness probe (not part of the emulated API surface).

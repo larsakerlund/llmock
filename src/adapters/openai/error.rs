@@ -9,12 +9,12 @@ use serde::Serialize;
 use crate::core::InjectError;
 
 #[derive(Debug, Serialize)]
-pub struct ErrorEnvelope {
+pub(crate) struct ErrorEnvelope {
     pub error: ErrorBody,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ErrorBody {
+pub(crate) struct ErrorBody {
     pub message: String,
     #[serde(rename = "type")]
     pub error_type: String,
@@ -23,13 +23,13 @@ pub struct ErrorBody {
 }
 
 /// An error ready to be returned from a handler with the right status + body.
-pub struct ApiError {
+pub(crate) struct ApiError {
     pub status: StatusCode,
     pub body: ErrorEnvelope,
 }
 
 impl ApiError {
-    pub fn new(
+    pub(crate) fn new(
         status: StatusCode,
         error_type: impl Into<String>,
         message: impl Into<String>,
@@ -48,14 +48,14 @@ impl ApiError {
     }
 
     /// Malformed request body — what the real API returns for bad JSON / fields.
-    pub fn invalid_request(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
         ApiError::new(StatusCode::BAD_REQUEST, "invalid_request_error", message)
     }
 
     /// llmock could not find a fixture for this request — a mock-config problem,
     /// not something the real API produces. Flagged with a distinct type so it
     /// is obvious in test output.
-    pub fn no_fixture(message: impl Into<String>) -> Self {
+    pub(crate) fn no_fixture(message: impl Into<String>) -> Self {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "llmock_no_fixture",
@@ -65,9 +65,8 @@ impl ApiError {
 
     /// Render a developer-configured injected error into the OpenAI envelope.
     /// An unknown/invalid status falls back to 500.
-    pub fn from_inject(err: InjectError) -> Self {
-        let status =
-            StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    pub(crate) fn from_inject(err: InjectError) -> Self {
+        let status = StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         ApiError {
             status,
             body: ErrorEnvelope {
@@ -84,7 +83,7 @@ impl ApiError {
     /// A capability llmock has not implemented yet. Kept for endpoints still on
     /// the roadmap.
     #[allow(dead_code)]
-    pub fn not_implemented(message: impl Into<String>) -> Self {
+    pub(crate) fn not_implemented(message: impl Into<String>) -> Self {
         ApiError::new(
             StatusCode::NOT_IMPLEMENTED,
             "llmock_not_implemented",

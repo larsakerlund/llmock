@@ -6,8 +6,12 @@ use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(name = "llmock", version, about = "Emulate LLM provider HTTP APIs with canned fixtures.")]
-pub struct Config {
+#[command(
+    name = "llmock",
+    version,
+    about = "Emulate LLM provider HTTP APIs with canned fixtures."
+)]
+pub(crate) struct Config {
     /// Address to bind.
     #[arg(long, env = "LLMOCK_HOST", default_value = "127.0.0.1")]
     pub host: IpAddr,
@@ -39,7 +43,7 @@ pub struct Config {
 
 impl Config {
     /// Resolve the global streaming defaults, validating `default_chunk_by`.
-    pub fn stream_defaults(&self) -> Result<crate::core::StreamSpec, String> {
+    pub(crate) fn stream_defaults(&self) -> Result<crate::core::StreamSpec, String> {
         Ok(crate::core::StreamSpec {
             ttft_ms: self.default_ttft_ms,
             inter_token_ms: self.default_inter_token_ms,

@@ -10,7 +10,7 @@ use crate::adapters::openai::request::Content;
 use crate::core::{Message, NeutralRequest};
 
 #[derive(Debug, Deserialize)]
-pub struct ResponsesRequest {
+pub(crate) struct ResponsesRequest {
     pub model: String,
     #[serde(default)]
     pub input: Input,
@@ -23,7 +23,7 @@ pub struct ResponsesRequest {
 /// `input` is either a bare string or an array of input items.
 #[derive(Debug, Deserialize, Default)]
 #[serde(untagged)]
-pub enum Input {
+pub(crate) enum Input {
     #[default]
     Empty,
     Text(String),
@@ -31,7 +31,7 @@ pub enum Input {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct InputItem {
+pub(crate) struct InputItem {
     #[serde(default)]
     pub role: Option<String>,
     #[serde(default)]
@@ -39,7 +39,7 @@ pub struct InputItem {
 }
 
 impl ResponsesRequest {
-    pub fn into_neutral(self) -> NeutralRequest {
+    pub(crate) fn into_neutral(self) -> NeutralRequest {
         let mut messages = Vec::new();
 
         // `instructions` acts like a system prompt.

@@ -6,7 +6,7 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 
 /// Seconds since the Unix epoch, as the real APIs report in `created`.
-pub fn unix_now() -> u64 {
+pub(crate) fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -22,41 +22,41 @@ fn random_suffix(len: usize) -> String {
 }
 
 /// `chatcmpl-…` id, matching OpenAI's shape.
-pub fn completion_id() -> String {
+pub(crate) fn completion_id() -> String {
     format!("chatcmpl-{}", random_suffix(29))
 }
 
 /// `fp_…` system fingerprint, matching OpenAI's shape.
-pub fn system_fingerprint() -> String {
+pub(crate) fn system_fingerprint() -> String {
     format!("fp_{}", random_suffix(10))
 }
 
 /// `call_…` tool-call id, matching OpenAI's shape.
-pub fn tool_call_id() -> String {
+pub(crate) fn tool_call_id() -> String {
     format!("call_{}", random_suffix(24))
 }
 
 /// `resp_…` Responses API response id.
-pub fn response_id() -> String {
+pub(crate) fn response_id() -> String {
     format!("resp_{}", random_suffix(24))
 }
 
 /// `msg_…` Responses API output message item id.
-pub fn message_item_id() -> String {
+pub(crate) fn message_item_id() -> String {
     format!("msg_{}", random_suffix(24))
 }
 
 /// `fc_…` Responses API function-call item id.
-pub fn function_item_id() -> String {
+pub(crate) fn function_item_id() -> String {
     format!("fc_{}", random_suffix(24))
 }
 
 /// `msg_…` Anthropic Messages id.
-pub fn anthropic_message_id() -> String {
+pub(crate) fn anthropic_message_id() -> String {
     format!("msg_{}", random_suffix(24))
 }
 
 /// `toolu_…` Anthropic tool-use block id.
-pub fn tool_use_id() -> String {
+pub(crate) fn tool_use_id() -> String {
     format!("toolu_{}", random_suffix(24))
 }
