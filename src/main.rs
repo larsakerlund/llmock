@@ -53,15 +53,13 @@ async fn main() {
         std::process::exit(1);
     });
 
-    let state = AppState::new(fixtures, stream_defaults);
+    if config.deterministic {
+        util::enable_deterministic();
+        tracing::info!("deterministic mode: ids and timestamps are reproducible");
+    }
 
-    let app = Router::new()
-        .route("/healthz", get(healthz))
-        .merge(adapters::openai::router())
-        .merge(adapters::openai_responses::router())
-        .merge(adapters::anthropic::router())
-        .merge(adapters::gemini::router())
-        .with_state(state);
+    let state = AppState::new(fixtures, stream_defaults);
+    let app = build_app(state);
 
     let addr = SocketAddr::new(config.host, config.port);
     let listener = tokio::net::TcpListener::bind(addr)
@@ -75,7 +73,22 @@ async fn main() {
     axum::serve(listener, app).await.expect("server error");
 }
 
+/// Assemble the full router (all provider adapters + health probe) over the
+/// given state. Shared by `main` and the in-process wire tests.
+fn build_app(state: AppState) -> Router {
+    Router::new()
+        .route("/healthz", get(healthz))
+        .merge(adapters::openai::router())
+        .merge(adapters::openai_responses::router())
+        .merge(adapters::anthropic::router())
+        .merge(adapters::gemini::router())
+        .with_state(state)
+}
+
 /// Liveness probe (not part of the emulated API surface).
 async fn healthz() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok" }))
 }
+
+#[cfg(test)]
+mod wire_tests;

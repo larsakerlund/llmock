@@ -39,6 +39,11 @@ pub(crate) struct Config {
     /// (characters per chunk). Overridden per-rule by `stream.chunk_by`.
     #[arg(long, env = "LLMOCK_CHUNK_BY", default_value = "word")]
     pub default_chunk_by: String,
+
+    /// Make ids and timestamps reproducible (monotonic counter, fixed time) so
+    /// responses are byte-stable — useful for snapshot testing.
+    #[arg(long, env = "LLMOCK_DETERMINISTIC", default_value_t = false)]
+    pub deterministic: bool,
 }
 
 impl Config {
