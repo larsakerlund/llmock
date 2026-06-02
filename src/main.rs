@@ -4,6 +4,7 @@
 //! served against a YAML fixture set.
 
 mod adapters;
+mod cassette;
 mod config;
 mod core;
 mod fixtures;
@@ -13,11 +14,13 @@ mod stream;
 mod util;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
 
+use cassette::{CassetteLayer, Cassettes, RecordConfig};
 use config::Config;
 use fixtures::Fixtures;
 use state::AppState;
@@ -60,7 +63,37 @@ async fn main() {
     }
 
     let state = AppState::new(fixtures, stream_defaults);
-    let app = build_app(state);
+    let mut app = build_app(state);
+
+    // Optional record/replay cassette layer.
+    if config.record && config.cassette_dir.is_none() {
+        eprintln!("error: --record requires --cassette-dir");
+        std::process::exit(1);
+    }
+    if let Some(dir) = &config.cassette_dir {
+        let store = Cassettes::load(dir).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        });
+        tracing::info!(
+            "loaded {} cassette(s) from {}{}",
+            store.len(),
+            dir.display(),
+            if config.record { " (recording)" } else { "" }
+        );
+        let layer = CassetteLayer {
+            store: Arc::new(store),
+            dir: dir.clone(),
+            record: config.record.then(|| RecordConfig {
+                upstream: config.upstream.clone(),
+            }),
+            client: reqwest::Client::new(),
+        };
+        app = app.layer(axum::middleware::from_fn_with_state(
+            layer,
+            cassette::middleware,
+        ));
+    }
 
     let addr = SocketAddr::new(config.host, config.port);
     let listener = tokio::net::TcpListener::bind(addr)
@@ -91,5 +124,7 @@ async fn healthz() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok" }))
 }
 
+#[cfg(test)]
+mod cassette_tests;
 #[cfg(test)]
 mod wire_tests;

@@ -44,6 +44,22 @@ pub(crate) struct Config {
     /// responses are byte-stable — useful for snapshot testing.
     #[arg(long, env = "LLMOCK_DETERMINISTIC", default_value_t = false)]
     pub deterministic: bool,
+
+    /// Directory of record/replay cassettes. When set, a request matching a
+    /// stored cassette is replayed byte-for-byte before fixtures are consulted.
+    #[arg(long, env = "LLMOCK_CASSETTE_DIR")]
+    pub cassette_dir: Option<PathBuf>,
+
+    /// Record mode: proxy a request with no matching cassette to the real
+    /// upstream, save the exchange under `--cassette-dir`, and return the real
+    /// bytes. Requires `--cassette-dir`.
+    #[arg(long, env = "LLMOCK_RECORD", default_value_t = false)]
+    pub record: bool,
+
+    /// Override the upstream base URL used in record mode (default: the real
+    /// provider, chosen by request path). Mainly for testing.
+    #[arg(long, env = "LLMOCK_UPSTREAM")]
+    pub upstream: Option<String>,
 }
 
 impl Config {

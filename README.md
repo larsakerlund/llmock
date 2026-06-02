@@ -139,6 +139,37 @@ genuine SDK reassembles them into valid JSON. Argument fragmentation follows the
 same `chunk_by` granularity as text (use `chunk_by: char` for fine-grained
 fragments).
 
+## Record & replay (cassettes)
+
+For the strongest fidelity, replay **real captured responses** instead of
+hand-written fixtures. Point `--cassette-dir` at a directory of cassettes; a
+request that matches one is replayed byte-for-byte, before fixtures are consulted:
+
+```sh
+llmock --cassette-dir ./cassettes              # replay only
+llmock --cassette-dir ./cassettes --record \   # record misses from the real API
+       --upstream https://api.openai.com        # (optional; defaults per path)
+```
+
+In **record** mode, a request with no matching cassette is proxied to the real
+upstream (chosen by path: OpenAI / Anthropic / Gemini, or `--upstream`), the
+exchange is saved under `--cassette-dir`, and the genuine bytes are returned.
+Your client's auth headers are forwarded, so you record with your own key once,
+then replay offline forever. A cassette is plain JSON:
+
+```json
+{
+  "request":  { "method": "POST", "path": "/v1/chat/completions", "query": "",
+                "body": { "model": "gpt-4o", "messages": [ ... ] } },
+  "response": { "status": 200, "content_type": "application/json",
+                "body": "{ ...exact server bytes... }" }
+}
+```
+
+Matching is provider-agnostic — method + path + query + the request JSON body
+(compared structurally, so key order and whitespace don't matter). Misses fall
+through to the fixture engine, so cassettes and fixtures compose.
+
 ## Endpoints
 
 | Method | Path | Notes |
@@ -174,6 +205,8 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 - `src/adapters/anthropic/`      — Anthropic Messages API
 - `src/adapters/gemini/`         — Google Gemini API
 - `src/fixtures.rs`              — matching rules
+- `src/cassette.rs`             — record/replay middleware
+- `src/sse.rs`                  — shared SSE framing + fault handling
 - `src/stream.rs`               — text chunking + timing
 - `src/util.rs`                 — id/timestamp helpers
 
@@ -201,10 +234,12 @@ our bytes and yield the expected objects, the format is faithful.
   provider (`gpt-4o` and `gpt-4o-mini` share identical Chat Completions framing;
   all Claude models share the Messages framing), so one adapter is faithful
   across every model of that provider.
-- **Byte-level server fidelity — in progress.** SDK-parse proves the *client*
-  accepts our bytes; it does not prove we're byte-identical to the real *server*
-  (SDKs ignore unknown fields, field order, null-vs-absent). Record/replay
-  cassettes (roadmap) close this by byte-diffing against captured real responses.
+- **Byte-level server fidelity — available via cassettes.** SDK-parse proves the
+  *client* accepts our bytes; it does not prove the synthesized fixtures are
+  byte-identical to the real *server* (SDKs ignore unknown fields, field order,
+  null-vs-absent). For exactness, record a real response into a cassette (see
+  [Record & replay](#record--replay-cassettes)) and llmock replays the genuine
+  bytes verbatim.
 - **Token counts are approximate.** `usage` is a word-count heuristic, not a real
   tokenizer, so counts won't match a specific model.
 - **Model-specific behaviour is developer-authored.** Things that genuinely vary
@@ -221,7 +256,8 @@ our bytes and yield the expected objects, the format is faithful.
 - [x] M5 — OpenAI Responses API (`/v1/responses`): full `response.*` event lifecycle + non-streaming, text & tool calls
 - [x] M7 — Anthropic Messages API (`/v1/messages`): named-event streaming lifecycle + non-streaming, text & tool use, Anthropic error envelope
 - [x] M8 — Google Gemini API (`generateContent` / `streamGenerateContent`): SSE streaming + non-streaming, text & function calls, Google error envelope
-- [ ] M6 — Record/replay cassettes (proxy a real API once, replay exactly); per-provider path prefixes (`/openai`, `/anthropic`, …)
+- [x] M6 — Record/replay cassettes (proxy a real API once, replay exactly byte-for-byte)
+- [ ] Per-provider path prefixes (`/openai`, `/anthropic`, …); streaming cassette re-timing
 
 ## License
 

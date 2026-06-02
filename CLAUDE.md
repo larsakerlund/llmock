@@ -15,6 +15,9 @@ Three layers over a provider-neutral core, so adding a provider is a new adapter
   Current: `openai` (Chat Completions + Models), `openai_responses`, `anthropic`.
 - `src/fixtures.rs` — match a request to a canned `Outcome`.
 - `src/stream.rs` — text chunking + streaming timing.
+- `src/sse.rs` — shared SSE byte framing + fault execution (used by all adapters).
+- `src/cassette.rs` — record/replay middleware: replays captured real responses
+  byte-for-byte; in record mode proxies misses to the real upstream and saves them.
 
 SSE streams are **hand-built byte streams** (`Body::from_stream`), never a
 framework SSE helper — we need exact control of the bytes. Serde struct field
