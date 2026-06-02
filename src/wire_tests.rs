@@ -209,6 +209,43 @@ async fn responses_stream_text() {
     assert_eq!(out, expected);
 }
 
+#[tokio::test]
+async fn provider_prefixes_route_to_the_right_adapter() {
+    // OpenAI under /openai (Chat Completions + Responses).
+    let (status, out) = post(
+        "/openai/v1/chat/completions",
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(out.contains("\"object\":\"chat.completion\""), "{out}");
+
+    let (status, out) = post("/openai/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(out.contains("\"object\":\"response\""), "{out}");
+
+    // Anthropic under /anthropic.
+    let (status, out) = post(
+        "/anthropic/v1/messages",
+        r#"{"model":"claude-opus-4-8","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(out.contains("\"type\":\"message\""), "{out}");
+
+    // Gemini under /gemini.
+    let (status, out) = post(
+        "/gemini/v1beta/models/gemini-2.0-flash:generateContent",
+        r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        out.contains("\"modelVersion\":\"gemini-2.0-flash\""),
+        "{out}"
+    );
+}
+
 /// Regeneration helper: prints redacted output for representative cases.
 #[tokio::test]
 #[ignore = "prints golden output for manual regeneration"]
