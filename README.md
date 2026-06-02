@@ -155,14 +155,21 @@ In **record** mode, a request with no matching cassette is proxied to the real
 upstream (chosen by path: OpenAI / Anthropic / Gemini, or `--upstream`), the
 exchange is saved under `--cassette-dir`, and the genuine bytes are returned.
 Your client's auth headers are forwarded, so you record with your own key once,
-then replay offline forever. A cassette is plain JSON:
+then replay offline forever.
+
+**Streaming is captured with its real timing.** For an SSE response, each chunk
+is recorded with the actual inter-chunk delay (including time-to-first-token),
+and replay re-applies those delays — so a replayed stream paces exactly like the
+real one, not all at once. A cassette is plain JSON; non-streaming uses `body`,
+streaming uses timed `frames`:
 
 ```json
 {
   "request":  { "method": "POST", "path": "/v1/chat/completions", "query": "",
                 "body": { "model": "gpt-4o", "messages": [ ... ] } },
-  "response": { "status": 200, "content_type": "application/json",
-                "body": "{ ...exact server bytes... }" }
+  "response": { "status": 200, "content_type": "text/event-stream",
+                "frames": [ { "delay_ms": 120, "data": "data: {...}\n\n" },
+                            { "delay_ms": 25,  "data": "data: {...}\n\n" } ] }
 }
 ```
 
@@ -187,6 +194,10 @@ The same fixture rules drive every endpoint — author once, test whichever API
 (and provider) your app calls. Point each SDK's base URL at llmock: OpenAI →
 `http://host:8080/v1`, Anthropic → `http://host:8080`, Gemini (google-genai) →
 `http://host:8080` via `HttpOptions(base_url=…)`.
+
+Every provider is also mounted under a `/{provider}` prefix — `…/openai/v1`,
+`…/anthropic`, `…/gemini` — for unambiguous routing when you run several
+providers behind one llmock. Both the root and prefixed paths work.
 
 ## Architecture
 
@@ -256,8 +267,8 @@ our bytes and yield the expected objects, the format is faithful.
 - [x] M5 — OpenAI Responses API (`/v1/responses`): full `response.*` event lifecycle + non-streaming, text & tool calls
 - [x] M7 — Anthropic Messages API (`/v1/messages`): named-event streaming lifecycle + non-streaming, text & tool use, Anthropic error envelope
 - [x] M8 — Google Gemini API (`generateContent` / `streamGenerateContent`): SSE streaming + non-streaming, text & function calls, Google error envelope
-- [x] M6 — Record/replay cassettes (proxy a real API once, replay exactly byte-for-byte)
-- [ ] Per-provider path prefixes (`/openai`, `/anthropic`, …); streaming cassette re-timing
+- [x] M6 — Record/replay cassettes (proxy a real API once, replay exactly byte-for-byte, streaming captured + replayed with its real timing)
+- [x] Per-provider path prefixes (`/openai`, `/anthropic`, `/gemini`) alongside the root mounts
 
 ## License
 

@@ -15,17 +15,20 @@
 //! (compared structurally, so key order and whitespace don't matter).
 
 use std::collections::hash_map::DefaultHasher;
+use std::convert::Infallible;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use axum::body::Body;
+use axum::body::{Body, Bytes};
 use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::time::sleep;
 
 /// One recorded request/response exchange.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,23 +47,51 @@ pub(crate) struct RequestSig {
     pub body: Value,
 }
 
-/// The captured response, replayed verbatim.
+/// The captured response, replayed verbatim. Non-streaming responses use
+/// `body`; streaming responses use `frames`, each replayed after its recorded
+/// inter-chunk delay so the original timing (including time-to-first-byte) is
+/// reproduced.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct StoredResponse {
     pub status: u16,
     pub content_type: String,
-    pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frames: Vec<Frame>,
+}
+
+/// One captured streamed chunk: its bytes and the delay since the previous one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Frame {
+    #[serde(default)]
+    pub delay_ms: u64,
+    pub data: String,
 }
 
 impl StoredResponse {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        (
-            status,
-            [(header::CONTENT_TYPE, self.content_type)],
-            self.body,
-        )
-            .into_response()
+        if self.frames.is_empty() {
+            let body = self.body.unwrap_or_default();
+            return (status, [(header::CONTENT_TYPE, self.content_type)], body).into_response();
+        }
+        // Streaming replay: re-emit each chunk after its recorded delay.
+        let frames = self.frames;
+        let body = Body::from_stream(async_stream::stream! {
+            for frame in frames {
+                if frame.delay_ms > 0 {
+                    sleep(Duration::from_millis(frame.delay_ms)).await;
+                }
+                yield Ok::<_, Infallible>(Bytes::from(frame.data));
+            }
+        });
+        Response::builder()
+            .status(status)
+            .header(header::CONTENT_TYPE, self.content_type)
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(body)
+            .expect("valid streaming response")
     }
 }
 
@@ -123,15 +154,34 @@ fn save(dir: &Path, cassette: &Cassette) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Default real upstream base URL for a request path.
-fn default_upstream(path: &str) -> &'static str {
-    if path.starts_with("/v1beta/") {
-        "https://generativelanguage.googleapis.com"
-    } else if path == "/v1/messages" {
-        "https://api.anthropic.com"
-    } else {
-        "https://api.openai.com"
+const OPENAI: &str = "https://api.openai.com";
+const ANTHROPIC: &str = "https://api.anthropic.com";
+const GEMINI: &str = "https://generativelanguage.googleapis.com";
+
+/// Resolve the real upstream for a request path, returning `(base_url,
+/// upstream_path)`. A `/{provider}` prefix selects the provider unambiguously
+/// and is stripped from the path sent upstream; otherwise the provider is
+/// inferred from the path shape.
+fn route_upstream(path: &str) -> (&'static str, String) {
+    for (prefix, base) in [
+        ("/openai", OPENAI),
+        ("/anthropic", ANTHROPIC),
+        ("/gemini", GEMINI),
+    ] {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            if rest.starts_with('/') {
+                return (base, rest.to_string());
+            }
+        }
     }
+    let base = if path.starts_with("/v1beta/") {
+        GEMINI
+    } else if path == "/v1/messages" {
+        ANTHROPIC
+    } else {
+        OPENAI
+    };
+    (base, path.to_string())
 }
 
 /// Configuration for record mode.
@@ -226,14 +276,17 @@ async fn record(
     query: String,
     body_json: &Value,
 ) -> Response {
+    // Resolve the upstream and strip any `/{provider}` prefix from the path we
+    // send on. An explicit `--upstream` override keeps the (stripped) path.
+    let (default_base, upstream_path) = route_upstream(&path);
     let base = rec
         .upstream
         .clone()
-        .unwrap_or_else(|| default_upstream(&path).to_string());
+        .unwrap_or_else(|| default_base.to_string());
     let url = if query.is_empty() {
-        format!("{base}{path}")
+        format!("{base}{upstream_path}")
     } else {
-        format!("{base}{path}?{query}")
+        format!("{base}{upstream_path}?{query}")
     };
 
     let Ok(reqwest_method) = reqwest::Method::from_bytes(method.as_bytes()) else {
@@ -247,7 +300,7 @@ async fn record(
         builder = builder.header(name, value);
     }
 
-    let upstream = match builder.send().await {
+    let mut upstream = match builder.send().await {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("record: upstream request to {url} failed: {e}");
@@ -266,11 +319,44 @@ async fn record(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/json")
         .to_string();
-    let body_bytes = upstream.bytes().await.unwrap_or_default();
-    let stored = StoredResponse {
-        status,
-        content_type,
-        body: String::from_utf8_lossy(&body_bytes).into_owned(),
+
+    // For SSE, capture each chunk with the real inter-chunk timing so replay
+    // reproduces the original pacing. Otherwise collect the whole body.
+    let stored = if content_type.contains("text/event-stream") {
+        let mut frames = Vec::new();
+        let mut last = Instant::now();
+        loop {
+            match upstream.chunk().await {
+                Ok(Some(chunk)) => {
+                    let now = Instant::now();
+                    let delay_ms = u64::try_from(now.duration_since(last).as_millis()).unwrap_or(0);
+                    last = now;
+                    frames.push(Frame {
+                        delay_ms,
+                        data: String::from_utf8_lossy(&chunk).into_owned(),
+                    });
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::error!("record: error reading upstream stream: {e}");
+                    break;
+                }
+            }
+        }
+        StoredResponse {
+            status,
+            content_type,
+            body: None,
+            frames,
+        }
+    } else {
+        let body_bytes = upstream.bytes().await.unwrap_or_default();
+        StoredResponse {
+            status,
+            content_type,
+            body: Some(String::from_utf8_lossy(&body_bytes).into_owned()),
+            frames: Vec::new(),
+        }
     };
 
     let cassette = Cassette {

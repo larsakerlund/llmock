@@ -3,6 +3,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
@@ -12,7 +13,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use crate::build_app;
-use crate::cassette::{CassetteLayer, Cassettes, RecordConfig};
+use crate::cassette::{Cassette, CassetteLayer, Cassettes, RecordConfig};
 use crate::core::StreamSpec;
 use crate::fixtures::Fixtures;
 use crate::state::AppState;
@@ -64,6 +65,27 @@ async fn spawn_upstream(body: &'static str) -> String {
     let app = Router::new().fallback(any(move || async move {
         ([(header::CONTENT_TYPE, "application/json")], body)
     }));
+    serve(app).await
+}
+
+/// Spawn a mock upstream that streams SSE chunks with a delay between each.
+async fn spawn_sse_upstream(chunks: &'static [&'static str], gap: Duration) -> String {
+    let app = Router::new().fallback(any(move || async move {
+        let body = Body::from_stream(async_stream::stream! {
+            for (i, c) in chunks.iter().enumerate() {
+                if i > 0 { tokio::time::sleep(gap).await; }
+                yield Ok::<_, std::convert::Infallible>(axum::body::Bytes::from(*c));
+            }
+        });
+        axum::response::Response::builder()
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .body(body)
+            .unwrap()
+    }));
+    serve(app).await
+}
+
+async fn serve(app: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -161,4 +183,76 @@ async fn record_proxies_saves_and_then_replays() {
     )
     .await;
     assert_eq!(body, "{\"recorded\":true}");
+}
+
+#[tokio::test]
+async fn record_streaming_captures_timed_frames_and_replays() {
+    let dir = tempfile::tempdir().unwrap();
+    let chunks: &[&str] = &[
+        "data: {\"delta\":\"Hello \"}\n\n",
+        "data: {\"delta\":\"world\"}\n\n",
+        "data: [DONE]\n\n",
+    ];
+    let upstream = spawn_sse_upstream(chunks, Duration::from_millis(40)).await;
+
+    // Record the streaming exchange.
+    let app = app_with_cassettes(
+        dir.path(),
+        Some(RecordConfig {
+            upstream: Some(upstream),
+        }),
+    );
+    let (status, ct, body) = post(
+        app,
+        "/v1/chat/completions",
+        r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ct.contains("text/event-stream"));
+    assert_eq!(body, chunks.concat());
+
+    // The saved cassette stored timed frames, not a flat body.
+    let file = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        .unwrap()
+        .path();
+    let cassette: Cassette =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert!(
+        cassette.response.body.is_none(),
+        "streaming cassette should not use a flat body"
+    );
+    assert!(
+        cassette.response.frames.len() >= 2,
+        "expected multiple captured frames, got {}",
+        cassette.response.frames.len()
+    );
+    // A non-first frame should carry a recorded delay reflecting the upstream gap.
+    assert!(
+        cassette
+            .response
+            .frames
+            .iter()
+            .skip(1)
+            .any(|f| f.delay_ms > 0),
+        "expected a non-zero inter-chunk delay to be captured"
+    );
+
+    // Replay reproduces the bytes (and re-applies the timing).
+    let app = app_with_cassettes(dir.path(), None);
+    let start = std::time::Instant::now();
+    let (_, _, body) = post(
+        app,
+        "/v1/chat/completions",
+        r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(body, chunks.concat());
+    assert!(
+        start.elapsed() >= Duration::from_millis(40),
+        "replay should re-apply the recorded inter-chunk delay"
+    );
 }
