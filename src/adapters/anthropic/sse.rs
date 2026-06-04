@@ -44,14 +44,15 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
     let body = Body::from_stream(async_stream::stream! {
         // message_start — content empty, output_tokens starts at 1 like the API.
         let start_msg = StartMessage {
+            model: &resp.model,
             id: &id,
             message_type: "message",
             role: "assistant",
-            model: &resp.model,
             content: &[],
             stop_reason: None,
             stop_sequence: None,
-            usage: Usage { input_tokens: resp.usage.prompt_tokens, output_tokens: 1 },
+            stop_details: None,
+            usage: Usage::new(resp.usage.prompt_tokens, 1),
         };
         yield Ok::<_, Infallible>(event("message_start", &MessageStart {
             event_type: "message_start", message: &start_msg,
@@ -135,11 +136,20 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
             index += 1;
         }
 
-        // message_delta — stop reason + cumulative output tokens.
+        // message_delta — stop reason + cumulative usage (input + output).
         yield Ok(event("message_delta", &MessageDelta {
             event_type: "message_delta",
-            delta: StopDelta { stop_reason: stop_reason_str(resp.stop_reason), stop_sequence: None },
-            usage: DeltaUsage { output_tokens: resp.usage.completion_tokens },
+            delta: StopDelta {
+                stop_reason: stop_reason_str(resp.stop_reason),
+                stop_sequence: None,
+                stop_details: None,
+            },
+            usage: DeltaUsage {
+                input_tokens: resp.usage.prompt_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+                output_tokens: resp.usage.completion_tokens,
+            },
         }));
         yield Ok(event("message_stop", &MessageStop { event_type: "message_stop" }));
     });
@@ -164,14 +174,15 @@ struct MessageStart<'a> {
 
 #[derive(Serialize)]
 struct StartMessage<'a> {
+    model: &'a str,
     id: &'a str,
     #[serde(rename = "type")]
     message_type: &'static str,
     role: &'static str,
-    model: &'a str,
     content: &'a [()],
     stop_reason: Option<&'static str>,
     stop_sequence: Option<String>,
+    stop_details: Option<()>,
     usage: Usage,
 }
 
@@ -231,10 +242,14 @@ struct MessageDelta {
 struct StopDelta {
     stop_reason: &'static str,
     stop_sequence: Option<String>,
+    stop_details: Option<()>,
 }
 
 #[derive(Serialize)]
 struct DeltaUsage {
+    input_tokens: u32,
+    cache_creation_input_tokens: u32,
+    cache_read_input_tokens: u32,
     output_tokens: u32,
 }
 

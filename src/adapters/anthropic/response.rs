@@ -8,16 +8,19 @@ use serde_json::Value;
 use crate::core::{NeutralResponse, StopReason};
 use crate::util;
 
+// Field order matches the real Anthropic wire bytes exactly (verified against a
+// recorded api.anthropic.com response): model, id, type, role, content, …
 #[derive(Debug, Serialize)]
 pub(crate) struct MessageObject {
+    pub model: String,
     pub id: String,
     #[serde(rename = "type")]
     pub message_type: &'static str, // "message"
     pub role: &'static str, // "assistant"
-    pub model: String,
     pub content: Vec<ContentBlock>,
     pub stop_reason: &'static str,
     pub stop_sequence: Option<String>,
+    pub stop_details: Option<()>, // null
     pub usage: Usage,
 }
 
@@ -44,10 +47,41 @@ pub(crate) struct ToolUseBlock {
     pub input: Value,
 }
 
+// Full usage shape, field order matching the real API. Cache counts are zero
+// (llmock doesn't model prompt caching); `service_tier`/`inference_geo` use the
+// real API's stable defaults.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub(crate) struct Usage {
     pub input_tokens: u32,
+    pub cache_creation_input_tokens: u32,
+    pub cache_read_input_tokens: u32,
+    pub cache_creation: CacheCreation,
     pub output_tokens: u32,
+    pub service_tier: &'static str,
+    pub inference_geo: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub(crate) struct CacheCreation {
+    pub ephemeral_5m_input_tokens: u32,
+    pub ephemeral_1h_input_tokens: u32,
+}
+
+impl Usage {
+    pub(crate) fn new(input_tokens: u32, output_tokens: u32) -> Self {
+        Usage {
+            input_tokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation: CacheCreation {
+                ephemeral_5m_input_tokens: 0,
+                ephemeral_1h_input_tokens: 0,
+            },
+            output_tokens,
+            service_tier: "standard",
+            inference_geo: "not_available",
+        }
+    }
 }
 
 /// Map a neutral stop reason to Anthropic's vocabulary.
@@ -102,16 +136,14 @@ pub(crate) fn message_object(
     tool_ids: &[String],
 ) -> MessageObject {
     MessageObject {
+        model: resp.model.clone(),
         id: id.to_string(),
         message_type: "message",
         role: "assistant",
-        model: resp.model.clone(),
         content: content_blocks(resp, tool_ids),
         stop_reason: stop_reason_str(resp.stop_reason),
         stop_sequence: None,
-        usage: Usage {
-            input_tokens: resp.usage.prompt_tokens,
-            output_tokens: resp.usage.completion_tokens,
-        },
+        stop_details: None,
+        usage: Usage::new(resp.usage.prompt_tokens, resp.usage.completion_tokens),
     }
 }
