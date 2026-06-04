@@ -27,9 +27,13 @@ rules:
 "#;
 
 fn app_with(dir: &Path, record: Option<RecordConfig>) -> Router {
+    app_with_speed(dir, record, 1.0)
+}
+
+fn app_with_speed(dir: &Path, record: Option<RecordConfig>, speed: f64) -> Router {
     let store = Cassettes::load(dir).expect("load cassettes");
     let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
-    let state = AppState::new(fixtures, StreamSpec::default()).with_cassettes(store, record);
+    let state = AppState::new(fixtures, StreamSpec::default()).with_cassettes(store, record, speed);
     build_app(state)
 }
 
@@ -223,14 +227,25 @@ async fn record_streaming_captures_timed_frames_and_replays() {
         .skip(1)
         .any(|f| f.delay_ms > 0));
 
-    // Replay re-applies the recorded timing.
+    // Replay at real speed (1.0) re-applies the recorded timing.
+    let body_req =
+        r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#;
+    let start = std::time::Instant::now();
+    let (_, _, body) = post(app_with(dir.path(), None), "/v1/chat/completions", body_req).await;
+    assert_eq!(body, chunks.concat());
+    assert!(start.elapsed() >= Duration::from_millis(40));
+
+    // replay-speed 0 replays instantly: same bytes, no waiting.
     let start = std::time::Instant::now();
     let (_, _, body) = post(
-        app_with(dir.path(), None),
+        app_with_speed(dir.path(), None, 0.0),
         "/v1/chat/completions",
-        r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
+        body_req,
     )
     .await;
     assert_eq!(body, chunks.concat());
-    assert!(start.elapsed() >= Duration::from_millis(40));
+    assert!(
+        start.elapsed() < Duration::from_millis(30),
+        "speed 0 should skip the recorded delays"
+    );
 }

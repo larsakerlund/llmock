@@ -83,7 +83,7 @@ async fn main() {
             dir: dir.clone(),
             upstream: config.upstream.clone(),
         });
-        state = state.with_cassettes(store, record);
+        state = state.with_cassettes(store, record, config.replay_speed);
     }
     let app = build_app(state);
 

@@ -60,6 +60,12 @@ pub(crate) struct Config {
     /// provider, chosen by request path). Mainly for testing.
     #[arg(long, env = "LLMOCK_UPSTREAM")]
     pub upstream: Option<String>,
+
+    /// Speed factor applied to a streamed cassette's recorded timing on replay:
+    /// `1.0` reproduces the real timing, `2.0` is twice as fast, `0.5` half
+    /// speed, `0` replays instantly (useful for fast test suites).
+    #[arg(long, env = "LLMOCK_REPLAY_SPEED", default_value_t = 1.0)]
+    pub replay_speed: f64,
 }
 
 impl Config {

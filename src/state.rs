@@ -18,6 +18,9 @@ pub(crate) struct AppState {
     pub record: Option<RecordConfig>,
     /// HTTP client used for record-mode proxying.
     pub client: reqwest::Client,
+    /// Factor applied to recorded stream timing on replay (1.0 = real timing,
+    /// 0 = instant). See `--replay-speed`.
+    pub replay_speed: f64,
 }
 
 impl AppState {
@@ -28,6 +31,7 @@ impl AppState {
             cassettes: Arc::new(Cassettes::default()),
             record: None,
             client: reqwest::Client::new(),
+            replay_speed: 1.0,
         }
     }
 
@@ -35,9 +39,11 @@ impl AppState {
         mut self,
         cassettes: Cassettes,
         record: Option<RecordConfig>,
+        replay_speed: f64,
     ) -> Self {
         self.cassettes = Arc::new(cassettes);
         self.record = record;
+        self.replay_speed = replay_speed;
         self
     }
 }
