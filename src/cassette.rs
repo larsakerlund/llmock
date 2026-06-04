@@ -179,6 +179,7 @@ fn forwardable(headers: &HeaderMap) -> Vec<(reqwest::header::HeaderName, String)
         "x-api-key",
         "anthropic-version",
         "anthropic-beta",
+        "x-goog-api-key",
         "content-type",
         "accept",
         "openai-organization",
