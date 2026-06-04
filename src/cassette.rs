@@ -176,10 +176,11 @@ pub(crate) struct RecordConfig {
 fn forwardable(headers: &HeaderMap) -> Vec<(reqwest::header::HeaderName, String)> {
     const KEEP: &[&str] = &[
         "authorization",
-        "x-api-key",
+        "x-api-key", // Anthropic, Azure OpenAI
+        "api-key",   // Azure OpenAI
         "anthropic-version",
         "anthropic-beta",
-        "x-goog-api-key",
+        "x-goog-api-key", // Gemini
         "content-type",
         "accept",
         "openai-organization",
