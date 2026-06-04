@@ -191,16 +191,22 @@ you can hand-edit it:
 }
 ```
 
-**Streaming is captured with its real timing.** For an SSE response each chunk is
-recorded with the actual inter-chunk delay (including time-to-first-token), and
-replay re-applies those delays — so a replayed stream paces exactly like the real
-one. Streaming cassettes use timed `frames` in place of `body`:
+**Streaming is captured with its real timing.** For an SSE response each network
+chunk is recorded with the actual delay since the previous one — including the
+**time-to-first-token** (the first frame's delay) — and replay re-applies them, so
+a replayed stream paces like the real one. Streaming cassettes use timed `frames`
+in place of `body`:
 
 ```json
   "response": { "status": 200, "content_type": "text/event-stream",
-                "frames": [ { "delay_ms": 120, "data": "data: {...}\n\n" },
+                "frames": [ { "delay_ms": 740, "data": "data: {...}\n\n" },
                             { "delay_ms": 25,  "data": "data: {...}\n\n" } ] }
 ```
+
+Timing granularity is network-chunk level (a provider may coalesce several SSE
+events into one read), so TTFT and total duration are faithful while per-token
+cadence is approximate. **`--replay-speed`** scales it: `1.0` real time, `2.0`
+twice as fast, `0.5` half speed, `0` instant (handy for fast test suites).
 
 Misses fall through to the fixture engine, so cassettes and fixtures compose
 (handy: record the happy paths, hand-author errors and edge cases).
