@@ -142,21 +142,37 @@ fragments).
 ## Record & replay (cassettes)
 
 For the strongest fidelity, replay **real captured responses** instead of
-hand-written fixtures. Point `--cassette-dir` at a directory of cassettes; a
-request that matches one is replayed byte-for-byte, before fixtures are consulted:
+hand-written fixtures — replay is byte-for-byte exact, so it's as faithful as it
+gets. A request that matches a cassette is replayed before fixtures are consulted.
 
-```sh
-llmock --cassette-dir ./cassettes              # replay only
-llmock --cassette-dir ./cassettes --record \   # record misses from the real API
-       --upstream https://api.openai.com        # (optional; defaults per path)
-```
+### Record your own (step by step)
 
-In **record** mode, a request with no matching cassette is proxied to the real
-upstream (chosen by endpoint: OpenAI / Anthropic / Gemini, or `--upstream`), the
-exchange is saved under `--cassette-dir`, and the genuine bytes are returned.
-Your client's auth headers are forwarded, so you record with your own key once,
-then replay offline forever. (To replay newly recorded cassettes, restart in
-replay mode — they're loaded at startup.)
+1. **Start llmock in record mode**, pointed at a directory for the cassettes:
+   ```sh
+   llmock --cassette-dir ./cassettes --record
+   ```
+2. **Point your app/SDK's base URL at llmock**, using your **real API key** as
+   usual (llmock forwards your auth header upstream):
+
+   | Provider | SDK base URL | Auth header forwarded |
+   |----------|--------------|-----------------------|
+   | OpenAI | `http://localhost:8080/v1` | `Authorization: Bearer` |
+   | Azure OpenAI | `http://localhost:8080/openai/v1` + `--upstream https://<resource>.openai.azure.com/openai` | `api-key` (or `Authorization`) |
+   | Anthropic | `http://localhost:8080` | `x-api-key` |
+   | Gemini (`google-genai`) | `http://localhost:8080` via `HttpOptions(base_url=…)` | `x-goog-api-key` |
+
+3. **Make your normal calls.** Each request with no matching cassette is proxied
+   to the real provider (chosen by endpoint, or `--upstream`), saved under
+   `--cassette-dir`, and the genuine bytes are returned to your app. Fire as many
+   as you like — each distinct request becomes its own cassette.
+4. **Replay offline:** restart without `--record` (cassettes load at startup):
+   ```sh
+   llmock --cassette-dir ./cassettes
+   ```
+   Now there's no key or network — replays are byte-for-byte the real responses.
+
+`--upstream` overrides the real provider (point it at a proxy, a gateway, or —
+for Azure — your resource so `<upstream>/v1/chat/completions` is the real URL).
 
 **Cassettes are matched by the same engine as fixtures** — there's one matching
 model for everything. A cassette matches on `model` + last user message (the
@@ -258,12 +274,14 @@ our bytes and yield the expected objects, the format is faithful.
   provider (`gpt-4o` and `gpt-4o-mini` share identical Chat Completions framing;
   all Claude models share the Messages framing), so one adapter is faithful
   across every model of that provider.
-- **Byte-level server fidelity — available via cassettes.** SDK-parse proves the
-  *client* accepts our bytes; it does not prove the synthesized fixtures are
-  byte-identical to the real *server* (SDKs ignore unknown fields, field order,
-  null-vs-absent). For exactness, record a real response into a cassette (see
-  [Record & replay](#record--replay-cassettes)) and llmock replays the genuine
-  bytes verbatim.
+- **Byte-level server fidelity — exact via cassettes; close for synthesized.**
+  Cassette replay is byte-for-byte the real server's response — perfect fidelity,
+  including streaming timing. Synthesized fixtures aim to be byte-identical too:
+  field names, order, and types are matched against recorded real responses
+  (e.g. non-streaming Anthropic is byte-identical to `api.anthropic.com`, down to
+  `cache_creation`, `service_tier`, `inference_geo`). The residual gaps are rare
+  server quirks — notably some providers pad streaming SSE with whitespace, which
+  only cassette replay reproduces exactly. When in doubt, record.
 - **Token counts are approximate.** `usage` is a word-count heuristic, not a real
   tokenizer, so counts won't match a specific model.
 - **Model-specific behaviour is developer-authored.** Things that genuinely vary
