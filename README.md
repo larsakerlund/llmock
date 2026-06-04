@@ -152,30 +152,42 @@ llmock --cassette-dir ./cassettes --record \   # record misses from the real API
 ```
 
 In **record** mode, a request with no matching cassette is proxied to the real
-upstream (chosen by path: OpenAI / Anthropic / Gemini, or `--upstream`), the
+upstream (chosen by endpoint: OpenAI / Anthropic / Gemini, or `--upstream`), the
 exchange is saved under `--cassette-dir`, and the genuine bytes are returned.
 Your client's auth headers are forwarded, so you record with your own key once,
-then replay offline forever.
+then replay offline forever. (To replay newly recorded cassettes, restart in
+replay mode — they're loaded at startup.)
 
-**Streaming is captured with its real timing.** For an SSE response, each chunk
-is recorded with the actual inter-chunk delay (including time-to-first-token),
-and replay re-applies those delays — so a replayed stream paces exactly like the
-real one, not all at once. A cassette is plain JSON; non-streaming uses `body`,
-streaming uses timed `frames`:
+**Cassettes are matched by the same engine as fixtures** — there's one matching
+model for everything. A cassette matches on `model` + last user message (the
+fixture `Match`), scoped to its `endpoint` and streaming mode, so you record a
+few real responses and they replay whenever the prompt is *close enough* — not
+only on a pixel-perfect request. The recorded `match` is derived for you, and
+you can hand-edit it:
 
 ```json
 {
-  "request":  { "method": "POST", "path": "/v1/chat/completions", "query": "",
-                "body": { "model": "gpt-4o", "messages": [ ... ] } },
-  "response": { "status": 200, "content_type": "text/event-stream",
-                "frames": [ { "delay_ms": 120, "data": "data: {...}\n\n" },
-                            { "delay_ms": 25,  "data": "data: {...}\n\n" } ] }
+  "endpoint": "openai.chat",
+  "stream": false,
+  "match":    { "model": "gpt-4o", "user_contains": "weather" },
+  "response": { "status": 200, "content_type": "application/json",
+                "body": "{ ...exact server bytes... }" }
 }
 ```
 
-Matching is provider-agnostic — method + path + query + the request JSON body
-(compared structurally, so key order and whitespace don't matter). Misses fall
-through to the fixture engine, so cassettes and fixtures compose.
+**Streaming is captured with its real timing.** For an SSE response each chunk is
+recorded with the actual inter-chunk delay (including time-to-first-token), and
+replay re-applies those delays — so a replayed stream paces exactly like the real
+one. Streaming cassettes use timed `frames` in place of `body`:
+
+```json
+  "response": { "status": 200, "content_type": "text/event-stream",
+                "frames": [ { "delay_ms": 120, "data": "data: {...}\n\n" },
+                            { "delay_ms": 25,  "data": "data: {...}\n\n" } ] }
+```
+
+Misses fall through to the fixture engine, so cassettes and fixtures compose
+(handy: record the happy paths, hand-author errors and edge cases).
 
 ## Endpoints
 
@@ -216,7 +228,8 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 - `src/adapters/anthropic/`      — Anthropic Messages API
 - `src/adapters/gemini/`         — Google Gemini API
 - `src/fixtures.rs`              — matching rules
-- `src/cassette.rs`             — record/replay middleware
+- `src/engine.rs`               — one resolution path (cassette → record → fixture)
+- `src/cassette.rs`             — record/replay, matched by the same rules
 - `src/sse.rs`                  — shared SSE framing + fault handling
 - `src/stream.rs`               — text chunking + timing
 - `src/util.rs`                 — id/timestamp helpers

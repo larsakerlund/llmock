@@ -1,8 +1,9 @@
-//! Tests for the record/replay cassette layer. Replay is exercised offline;
+//! Tests for the unified record/replay engine. Replay is exercised offline;
 //! record is exercised against an in-process mock upstream (no real API keys).
+//! Cassettes are matched by the same `Match` as fixtures (model + last user
+//! message), scoped to endpoint + streaming mode.
 
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
@@ -13,7 +14,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use crate::build_app;
-use crate::cassette::{Cassette, CassetteLayer, Cassettes, RecordConfig};
+use crate::cassette::{Cassette, Cassettes, RecordConfig};
 use crate::core::StreamSpec;
 use crate::fixtures::Fixtures;
 use crate::state::AppState;
@@ -25,20 +26,11 @@ rules:
       content: "fallback fixture response"
 "#;
 
-fn app_with_cassettes(dir: &Path, record: Option<RecordConfig>) -> Router {
+fn app_with(dir: &Path, record: Option<RecordConfig>) -> Router {
     let store = Cassettes::load(dir).expect("load cassettes");
     let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
-    let base = build_app(AppState::new(fixtures, StreamSpec::default()));
-    let layer = CassetteLayer {
-        store: Arc::new(store),
-        dir: dir.to_path_buf(),
-        record,
-        client: reqwest::Client::new(),
-    };
-    base.layer(axum::middleware::from_fn_with_state(
-        layer,
-        crate::cassette::middleware,
-    ))
+    let state = AppState::new(fixtures, StreamSpec::default()).with_cassettes(store, record);
+    build_app(state)
 }
 
 async fn post(app: Router, uri: &str, body: &str) -> (StatusCode, String, String) {
@@ -60,7 +52,15 @@ async fn post(app: Router, uri: &str, body: &str) -> (StatusCode, String, String
     (status, ct, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-/// Spawn a mock upstream that returns `body` for any request, return its base URL.
+async fn serve(app: Router) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
 async fn spawn_upstream(body: &'static str) -> String {
     let app = Router::new().fallback(any(move || async move {
         ([(header::CONTENT_TYPE, "application/json")], body)
@@ -68,7 +68,6 @@ async fn spawn_upstream(body: &'static str) -> String {
     serve(app).await
 }
 
-/// Spawn a mock upstream that streams SSE chunks with a delay between each.
 async fn spawn_sse_upstream(chunks: &'static [&'static str], gap: Duration) -> String {
     let app = Router::new().fallback(any(move || async move {
         let body = Body::from_stream(async_stream::stream! {
@@ -85,25 +84,20 @@ async fn spawn_sse_upstream(chunks: &'static [&'static str], gap: Duration) -> S
     serve(app).await
 }
 
-async fn serve(app: Router) -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    format!("http://{addr}")
+fn record_to(dir: &Path, upstream: &str) -> RecordConfig {
+    RecordConfig {
+        dir: dir.to_path_buf(),
+        upstream: Some(upstream.to_string()),
+    }
 }
 
 #[tokio::test]
-async fn replay_returns_stored_bytes_and_misses_fall_through() {
+async fn replay_matches_like_a_fixture_and_misses_fall_through() {
     let dir = tempfile::tempdir().unwrap();
     let cassette = serde_json::json!({
-        "request": {
-            "method": "POST",
-            "path": "/v1/chat/completions",
-            "query": "",
-            "body": {"model": "gpt-4o", "messages": [{"role": "user", "content": "replay me"}]}
-        },
+        "endpoint": "openai.chat",
+        "stream": false,
+        "match": { "model": "gpt-4o", "user_contains": "weather" },
         "response": {
             "status": 200,
             "content_type": "application/json",
@@ -116,12 +110,11 @@ async fn replay_returns_stored_bytes_and_misses_fall_through() {
     )
     .unwrap();
 
-    // Exact-match request is replayed verbatim.
-    let app = app_with_cassettes(dir.path(), None);
+    // Same model + a message *containing* "weather" replays (not exact body).
     let (status, ct, body) = post(
-        app,
+        app_with(dir.path(), None),
         "/v1/chat/completions",
-        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"replay me"}]}"#,
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"what is the weather today?"}]}"#,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -131,34 +124,35 @@ async fn replay_returns_stored_bytes_and_misses_fall_through() {
         "{\"id\":\"chatcmpl-REAL\",\"object\":\"chat.completion\"}"
     );
 
-    // A different body misses the cassette and falls through to the fixture.
-    let app = app_with_cassettes(dir.path(), None);
+    // Different model misses (endpoint+model scope), falls to the fixture.
     let (_, _, body) = post(
-        app,
+        app_with(dir.path(), None),
         "/v1/chat/completions",
-        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"something else"}]}"#,
+        r#"{"model":"gpt-4o-mini","messages":[{"role":"user","content":"weather?"}]}"#,
+    )
+    .await;
+    assert!(body.contains("fallback fixture response"), "{body}");
+
+    // A streaming request does not replay a non-streaming cassette.
+    let (_, ct, _) = post(
+        app_with(dir.path(), None),
+        "/v1/chat/completions",
+        r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"weather?"}]}"#,
     )
     .await;
     assert!(
-        body.contains("fallback fixture response"),
-        "expected fixture fallthrough, got {body}"
+        ct.contains("text/event-stream"),
+        "should fall to the streaming fixture, got {ct}"
     );
 }
 
 #[tokio::test]
-async fn record_proxies_saves_and_then_replays() {
+async fn record_proxies_saves_with_derived_match_then_replays() {
     let dir = tempfile::tempdir().unwrap();
     let upstream = spawn_upstream("{\"recorded\":true}").await;
 
-    // Record: no cassette yet, so proxy to the mock upstream and save.
-    let app = app_with_cassettes(
-        dir.path(),
-        Some(RecordConfig {
-            upstream: Some(upstream.clone()),
-        }),
-    );
     let (status, _, body) = post(
-        app,
+        app_with(dir.path(), Some(record_to(dir.path(), &upstream))),
         "/v1/chat/completions",
         r#"{"model":"gpt-4o","messages":[{"role":"user","content":"record me"}]}"#,
     )
@@ -166,20 +160,23 @@ async fn record_proxies_saves_and_then_replays() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, "{\"recorded\":true}");
 
-    // A cassette file was written.
-    let files: Vec<_> = std::fs::read_dir(dir.path())
+    // One cassette saved, with a match derived from the request.
+    let file = std::fs::read_dir(dir.path())
         .unwrap()
         .filter_map(Result::ok)
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
-        .collect();
-    assert_eq!(files.len(), 1, "expected one recorded cassette");
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        .unwrap()
+        .path();
+    let cassette: Cassette =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(cassette.match_.model.as_deref(), Some("gpt-4o"));
+    assert_eq!(cassette.match_.user_contains.as_deref(), Some("record me"));
 
-    // Replaying (no record) from the same dir returns the recorded bytes.
-    let app = app_with_cassettes(dir.path(), None);
+    // Replay-only: a request that *contains* the recorded message replays.
     let (_, _, body) = post(
-        app,
+        app_with(dir.path(), None),
         "/v1/chat/completions",
-        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"record me"}]}"#,
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"please record me now"}]}"#,
     )
     .await;
     assert_eq!(body, "{\"recorded\":true}");
@@ -195,15 +192,8 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     ];
     let upstream = spawn_sse_upstream(chunks, Duration::from_millis(40)).await;
 
-    // Record the streaming exchange.
-    let app = app_with_cassettes(
-        dir.path(),
-        Some(RecordConfig {
-            upstream: Some(upstream),
-        }),
-    );
     let (status, ct, body) = post(
-        app,
+        app_with(dir.path(), Some(record_to(dir.path(), &upstream))),
         "/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
     )
@@ -212,7 +202,6 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     assert!(ct.contains("text/event-stream"));
     assert_eq!(body, chunks.concat());
 
-    // The saved cassette stored timed frames, not a flat body.
     let file = std::fs::read_dir(dir.path())
         .unwrap()
         .filter_map(Result::ok)
@@ -222,37 +211,26 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     let cassette: Cassette =
         serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert!(
-        cassette.response.body.is_none(),
-        "streaming cassette should not use a flat body"
+        cassette.stream,
+        "recorded cassette should be marked streaming"
     );
-    assert!(
-        cassette.response.frames.len() >= 2,
-        "expected multiple captured frames, got {}",
-        cassette.response.frames.len()
-    );
-    // A non-first frame should carry a recorded delay reflecting the upstream gap.
-    assert!(
-        cassette
-            .response
-            .frames
-            .iter()
-            .skip(1)
-            .any(|f| f.delay_ms > 0),
-        "expected a non-zero inter-chunk delay to be captured"
-    );
+    assert!(cassette.response.body.is_none());
+    assert!(cassette.response.frames.len() >= 2);
+    assert!(cassette
+        .response
+        .frames
+        .iter()
+        .skip(1)
+        .any(|f| f.delay_ms > 0));
 
-    // Replay reproduces the bytes (and re-applies the timing).
-    let app = app_with_cassettes(dir.path(), None);
+    // Replay re-applies the recorded timing.
     let start = std::time::Instant::now();
     let (_, _, body) = post(
-        app,
+        app_with(dir.path(), None),
         "/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
     assert_eq!(body, chunks.concat());
-    assert!(
-        start.elapsed() >= Duration::from_millis(40),
-        "replay should re-apply the recorded inter-chunk delay"
-    );
+    assert!(start.elapsed() >= Duration::from_millis(40));
 }

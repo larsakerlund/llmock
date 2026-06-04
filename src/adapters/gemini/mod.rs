@@ -10,12 +10,15 @@ pub(crate) mod request;
 pub(crate) mod response;
 pub(crate) mod sse;
 
+use axum::body::Bytes;
 use axum::extract::{Path, State};
+use axum::http::{HeaderMap, Method, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
 
-use crate::core::Outcome;
+use crate::cassette::Endpoint;
+use crate::engine::{resolve, Resolution};
 use crate::state::AppState;
 use error::ApiError;
 use request::GenerateRequest;
@@ -29,7 +32,10 @@ pub(crate) fn router() -> Router<AppState> {
 async fn generate(
     State(state): State<AppState>,
     Path(model_action): Path<String>,
-    body: Result<Json<GenerateRequest>, axum::extract::rejection::JsonRejection>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    bytes: Bytes,
 ) -> Result<Response, ApiError> {
     // Split "<model>:<action>" — action selects streaming vs not.
     let (model, action) = model_action.rsplit_once(':').ok_or_else(|| {
@@ -47,27 +53,35 @@ async fn generate(
         }
     };
 
-    let Json(req) = body.map_err(|e| ApiError::invalid_request(e.body_text()))?;
-    let neutral = req.into_neutral(model.to_string(), stream);
+    let parsed: GenerateRequest = serde_json::from_slice(&bytes)
+        .map_err(|e| ApiError::invalid_request(format!("invalid request body: {e}")))?;
+    let neutral = parsed.into_neutral(model.to_string(), stream);
 
-    let outcome = state
-        .fixtures
-        .outcome_for(&neutral, state.stream_defaults)
-        .ok_or_else(|| {
-            ApiError::no_fixture(format!(
-                "no fixture rule matched (model={:?}); add a fallback rule with an empty `match`",
-                neutral.model
-            ))
-        })?;
+    let resolution = resolve(
+        &state,
+        Endpoint::Gemini,
+        &neutral,
+        &method,
+        uri.path(),
+        uri.query().unwrap_or(""),
+        &bytes,
+        &headers,
+    )
+    .await;
 
-    let resp = match outcome {
-        Outcome::Error(err) => return Err(ApiError::from_inject(err)),
-        Outcome::Respond(resp) => resp,
-    };
-
-    if neutral.stream {
-        Ok(sse::stream_response(&resp))
-    } else {
-        Ok(Json(generate_response(&resp)).into_response())
+    match resolution {
+        Resolution::Raw(resp) => Ok(resp),
+        Resolution::Synthesize(resp) => {
+            if neutral.stream {
+                Ok(sse::stream_response(&resp))
+            } else {
+                Ok(Json(generate_response(&resp)).into_response())
+            }
+        }
+        Resolution::Error(err) => Err(ApiError::from_inject(err)),
+        Resolution::NoMatch => Err(ApiError::no_fixture(format!(
+            "no fixture or cassette matched (model={:?}); add a fallback rule with an empty `match`",
+            neutral.model
+        ))),
     }
 }

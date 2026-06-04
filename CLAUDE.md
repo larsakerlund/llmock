@@ -16,8 +16,10 @@ Three layers over a provider-neutral core, so adding a provider is a new adapter
 - `src/fixtures.rs` — match a request to a canned `Outcome`.
 - `src/stream.rs` — text chunking + streaming timing.
 - `src/sse.rs` — shared SSE byte framing + fault execution (used by all adapters).
-- `src/cassette.rs` — record/replay middleware: replays captured real responses
-  byte-for-byte; in record mode proxies misses to the real upstream and saves them.
+- `src/engine.rs` — single resolution path: cassette replay → record → fixture.
+- `src/cassette.rs` — record/replay cassettes, matched by the **same** `Match` as
+  fixtures (model + last user message, scoped to endpoint + stream). Record proxies
+  misses to the real upstream and saves them (streams captured with real timing).
 
 SSE streams are **hand-built byte streams** (`Body::from_stream`), never a
 framework SSE helper — we need exact control of the bytes. Serde struct field

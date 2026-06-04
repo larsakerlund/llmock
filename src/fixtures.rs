@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::core::{
     ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason, StreamSpec,
@@ -35,7 +35,7 @@ pub(crate) struct Rule {
 
 /// Conditions to test against a request. All present conditions must hold
 /// (logical AND). Absent conditions are ignored.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Match {
     /// Exact model name.
     pub model: Option<String>,
@@ -229,7 +229,25 @@ pub(crate) struct FixtureUsage {
 }
 
 impl Match {
-    fn matches(&self, req: &NeutralRequest) -> bool {
+    /// Derive a match from a request — used when recording a cassette so it
+    /// replays for the same model + last user message.
+    pub(crate) fn for_request(req: &NeutralRequest) -> Self {
+        let user_contains = req
+            .last_user_message()
+            .filter(|m| !m.is_empty())
+            .map(ToString::to_string);
+        Match {
+            model: Some(req.model.clone()),
+            user_contains,
+        }
+    }
+
+    /// How specific this match is, for ordering (more specific tried first).
+    pub(crate) fn specificity(&self) -> usize {
+        self.user_contains.as_ref().map_or(0, String::len) + usize::from(self.model.is_some())
+    }
+
+    pub(crate) fn matches(&self, req: &NeutralRequest) -> bool {
         if let Some(model) = &self.model {
             if &req.model != model {
                 return false;

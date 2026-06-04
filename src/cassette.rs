@@ -1,56 +1,70 @@
-//! Record/replay cassettes (à la VCR/Polly).
+//! Record/replay cassettes, matched by the **same engine as fixtures**.
 //!
-//! A cassette captures one real provider exchange — the request signature and
-//! the exact response bytes — so llmock can replay the genuine server's output
-//! byte-for-byte. This is the strongest fidelity guarantee: replay what the real
-//! API actually sent, not what we think it sends.
+//! A cassette captures one real provider exchange. It is matched on the same
+//! [`Match`](crate::fixtures::Match) a fixture uses — `model` + last user
+//! message — scoped to the endpoint and streaming flag it was recorded for (so
+//! a Chat Completions cassette never answers an Anthropic, or a non-streaming,
+//! request). So there is one matching model for everything: a request resolves
+//! to a replayed cassette or a synthesized fixture by identical rules.
 //!
-//! Two modes, both as a middleware wrapping the whole router:
-//! - **Replay**: if a loaded cassette matches the incoming request, return its
-//!   stored response and never touch the adapters.
-//! - **Record**: on a miss (and only when recording), proxy the request to the
-//!   real upstream, save the exchange as a cassette, and return the real bytes.
-//!
-//! Matching is provider-agnostic: method + path + query + the request JSON body
-//! (compared structurally, so key order and whitespace don't matter).
+//! Recording proxies a miss to the real upstream, captures the exact bytes (and
+//! the real inter-chunk timing for streams), and saves a cassette whose match
+//! is derived from the request.
 
 use std::collections::hash_map::DefaultHasher;
 use std::convert::Infallible;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tokio::time::sleep;
 
-/// One recorded request/response exchange.
+use crate::core::NeutralRequest;
+use crate::fixtures::Match;
+
+/// Which provider/wire-format an exchange belongs to. Scopes cassette matching
+/// and selects the real upstream when recording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum Endpoint {
+    #[serde(rename = "openai.chat")]
+    OpenAiChat,
+    #[serde(rename = "openai.responses")]
+    OpenAiResponses,
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    #[serde(rename = "gemini")]
+    Gemini,
+}
+
+impl Endpoint {
+    pub(crate) fn upstream_base(self) -> &'static str {
+        match self {
+            Endpoint::OpenAiChat | Endpoint::OpenAiResponses => "https://api.openai.com",
+            Endpoint::Anthropic => "https://api.anthropic.com",
+            Endpoint::Gemini => "https://generativelanguage.googleapis.com",
+        }
+    }
+}
+
+/// One recorded exchange.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Cassette {
-    pub request: RequestSig,
+    pub endpoint: Endpoint,
+    /// Whether the recorded request was streaming (replays only same-mode).
+    #[serde(default)]
+    pub stream: bool,
+    #[serde(rename = "match")]
+    pub match_: Match,
     pub response: StoredResponse,
 }
 
-/// The request fields a cassette matches on.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct RequestSig {
-    pub method: String,
-    pub path: String,
-    #[serde(default)]
-    pub query: String,
-    pub body: Value,
-}
-
-/// The captured response, replayed verbatim. Non-streaming responses use
-/// `body`; streaming responses use `frames`, each replayed after its recorded
-/// inter-chunk delay so the original timing (including time-to-first-byte) is
-/// reproduced.
+/// The captured response. Non-streaming uses `body`; streaming uses `frames`,
+/// each replayed after its recorded inter-chunk delay so the original timing
+/// (including time-to-first-byte) is reproduced.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct StoredResponse {
     pub status: u16,
@@ -70,13 +84,12 @@ pub(crate) struct Frame {
 }
 
 impl StoredResponse {
-    fn into_response(self) -> Response {
+    pub(crate) fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         if self.frames.is_empty() {
             let body = self.body.unwrap_or_default();
             return (status, [(header::CONTENT_TYPE, self.content_type)], body).into_response();
         }
-        // Streaming replay: re-emit each chunk after its recorded delay.
         let frames = self.frames;
         let body = Body::from_stream(async_stream::stream! {
             for frame in frames {
@@ -95,7 +108,8 @@ impl StoredResponse {
     }
 }
 
-/// A directory of loaded cassettes.
+/// A loaded set of cassettes, ordered most-specific-first for deterministic
+/// matching.
 #[derive(Debug, Default)]
 pub(crate) struct Cassettes {
     entries: Vec<Cassette>,
@@ -119,6 +133,8 @@ impl Cassettes {
                 }
             }
         }
+        // Longer `user_contains` is more specific, so try it first.
+        entries.sort_by(|a, b| b.match_.specificity().cmp(&a.match_.specificity()));
         Ok(Cassettes { entries })
     }
 
@@ -126,15 +142,11 @@ impl Cassettes {
         self.entries.len()
     }
 
-    fn find(&self, method: &str, path: &str, query: &str, body: &Value) -> Option<&StoredResponse> {
+    /// First cassette for this endpoint + streaming mode whose `match` holds.
+    pub(crate) fn find(&self, endpoint: Endpoint, req: &NeutralRequest) -> Option<&StoredResponse> {
         self.entries
             .iter()
-            .find(|c| {
-                c.request.method == method
-                    && c.request.path == path
-                    && c.request.query == query
-                    && &c.request.body == body
-            })
+            .find(|c| c.endpoint == endpoint && c.stream == req.stream && c.match_.matches(req))
             .map(|c| &c.response)
     }
 }
@@ -143,103 +155,21 @@ impl Cassettes {
 fn save(dir: &Path, cassette: &Cassette) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     let mut hasher = DefaultHasher::new();
-    cassette.request.method.hash(&mut hasher);
-    cassette.request.path.hash(&mut hasher);
-    cassette.request.query.hash(&mut hasher);
-    cassette.request.body.to_string().hash(&mut hasher);
-    let name = format!("{:016x}.json", hasher.finish());
-    let path = dir.join(name);
+    serde_json::to_string(cassette)
+        .unwrap_or_default()
+        .hash(&mut hasher);
+    let path = dir.join(format!("{:016x}.json", hasher.finish()));
     let text = serde_json::to_string_pretty(cassette).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
     Ok(path)
 }
 
-const OPENAI: &str = "https://api.openai.com";
-const ANTHROPIC: &str = "https://api.anthropic.com";
-const GEMINI: &str = "https://generativelanguage.googleapis.com";
-
-/// Resolve the real upstream for a request path, returning `(base_url,
-/// upstream_path)`. A `/{provider}` prefix selects the provider unambiguously
-/// and is stripped from the path sent upstream; otherwise the provider is
-/// inferred from the path shape.
-fn route_upstream(path: &str) -> (&'static str, String) {
-    for (prefix, base) in [
-        ("/openai", OPENAI),
-        ("/anthropic", ANTHROPIC),
-        ("/gemini", GEMINI),
-    ] {
-        if let Some(rest) = path.strip_prefix(prefix) {
-            if rest.starts_with('/') {
-                return (base, rest.to_string());
-            }
-        }
-    }
-    let base = if path.starts_with("/v1beta/") {
-        GEMINI
-    } else if path == "/v1/messages" {
-        ANTHROPIC
-    } else {
-        OPENAI
-    };
-    (base, path.to_string())
-}
-
 /// Configuration for record mode.
 #[derive(Debug, Clone)]
 pub(crate) struct RecordConfig {
-    /// Override the upstream base URL (used for testing against a mock server).
-    pub upstream: Option<String>,
-}
-
-/// Middleware state: the loaded cassettes plus optional record config.
-#[derive(Clone)]
-pub(crate) struct CassetteLayer {
-    pub store: Arc<Cassettes>,
     pub dir: PathBuf,
-    pub record: Option<RecordConfig>,
-    pub client: reqwest::Client,
-}
-
-/// Replay/record middleware wrapping the whole router.
-pub(crate) async fn middleware(
-    State(layer): State<CassetteLayer>,
-    req: Request,
-    next: Next,
-) -> Response {
-    let (parts, body) = req.into_parts();
-    let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
-        return (StatusCode::BAD_REQUEST, "could not read request body").into_response();
-    };
-    let method = parts.method.as_str().to_string();
-    let path = parts.uri.path().to_string();
-    let query = parts.uri.query().unwrap_or("").to_string();
-    let json: Option<Value> = serde_json::from_slice(&bytes).ok();
-
-    // Replay: a matching cassette short-circuits everything.
-    if let Some(body_json) = &json {
-        if let Some(stored) = layer.store.find(&method, &path, &query, body_json) {
-            return stored.clone().into_response();
-        }
-    }
-
-    // Record: proxy to the real upstream, capture, and serve.
-    if let (Some(rec), Some(body_json)) = (&layer.record, &json) {
-        return record(
-            &layer,
-            rec,
-            &parts.headers,
-            &bytes,
-            method,
-            path,
-            query,
-            body_json,
-        )
-        .await;
-    }
-
-    // Otherwise fall through to the normal (fixture-based) adapters.
-    next.run(Request::from_parts(parts, Body::from(bytes)))
-        .await
+    /// Override the upstream base URL (default: the endpoint's real provider).
+    pub upstream: Option<String>,
 }
 
 /// Headers worth forwarding to the upstream (auth + content negotiation).
@@ -259,47 +189,40 @@ fn forwardable(headers: &HeaderMap) -> Vec<(reqwest::header::HeaderName, String)
         .filter(|(name, _)| KEEP.contains(&name.as_str()))
         .filter_map(|(name, value)| {
             let n = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes()).ok()?;
-            let v = value.to_str().ok()?.to_string();
-            Some((n, v))
+            Some((n, value.to_str().ok()?.to_string()))
         })
         .collect()
 }
 
+/// Proxy the request to the real upstream and capture the exchange. `path` is
+/// the provider path (already prefix-stripped by routing). On success the
+/// exchange is saved and the captured response returned to replay to the client.
 #[allow(clippy::too_many_arguments)]
-async fn record(
-    layer: &CassetteLayer,
+pub(crate) async fn record(
+    client: &reqwest::Client,
     rec: &RecordConfig,
+    endpoint: Endpoint,
+    neutral: &NeutralRequest,
+    path: &str,
+    query: &str,
+    method: &reqwest::Method,
+    raw_body: &Bytes,
     headers: &HeaderMap,
-    body: &[u8],
-    method: String,
-    path: String,
-    query: String,
-    body_json: &Value,
 ) -> Response {
-    // Resolve the upstream and strip any `/{provider}` prefix from the path we
-    // send on. An explicit `--upstream` override keeps the (stripped) path.
-    let (default_base, upstream_path) = route_upstream(&path);
     let base = rec
         .upstream
         .clone()
-        .unwrap_or_else(|| default_base.to_string());
+        .unwrap_or_else(|| endpoint.upstream_base().to_string());
     let url = if query.is_empty() {
-        format!("{base}{upstream_path}")
+        format!("{base}{path}")
     } else {
-        format!("{base}{upstream_path}?{query}")
+        format!("{base}{path}?{query}")
     };
 
-    let Ok(reqwest_method) = reqwest::Method::from_bytes(method.as_bytes()) else {
-        return (StatusCode::BAD_REQUEST, "bad method").into_response();
-    };
-    let mut builder = layer
-        .client
-        .request(reqwest_method, &url)
-        .body(body.to_vec());
+    let mut builder = client.request(method.clone(), &url).body(raw_body.to_vec());
     for (name, value) in forwardable(headers) {
         builder = builder.header(name, value);
     }
-
     let mut upstream = match builder.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -320,9 +243,7 @@ async fn record(
         .unwrap_or("application/json")
         .to_string();
 
-    // For SSE, capture each chunk with the real inter-chunk timing so replay
-    // reproduces the original pacing. Otherwise collect the whole body.
-    let stored = if content_type.contains("text/event-stream") {
+    let response = if content_type.contains("text/event-stream") {
         let mut frames = Vec::new();
         let mut last = Instant::now();
         loop {
@@ -350,28 +271,25 @@ async fn record(
             frames,
         }
     } else {
-        let body_bytes = upstream.bytes().await.unwrap_or_default();
+        let bytes = upstream.bytes().await.unwrap_or_default();
         StoredResponse {
             status,
             content_type,
-            body: Some(String::from_utf8_lossy(&body_bytes).into_owned()),
+            body: Some(String::from_utf8_lossy(&bytes).into_owned()),
             frames: Vec::new(),
         }
     };
 
     let cassette = Cassette {
-        request: RequestSig {
-            method,
-            path,
-            query,
-            body: body_json.clone(),
-        },
-        response: stored.clone(),
+        endpoint,
+        stream: neutral.stream,
+        match_: Match::for_request(neutral),
+        response: response.clone(),
     };
-    match save(&layer.dir, &cassette) {
-        Ok(path) => tracing::info!("recorded cassette {}", path.display()),
+    match save(&rec.dir, &cassette) {
+        Ok(p) => tracing::info!("recorded cassette {}", p.display()),
         Err(e) => tracing::error!("record: could not save cassette: {e}"),
     }
 
-    stored.into_response()
+    response.into_response()
 }
