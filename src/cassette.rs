@@ -84,7 +84,10 @@ pub(crate) struct Frame {
 }
 
 impl StoredResponse {
-    pub(crate) fn into_response(self) -> Response {
+    /// Build the HTTP response. For streaming, each recorded inter-chunk delay is
+    /// divided by `speed`: `1.0` reproduces the real timing, `2.0` is twice as
+    /// fast, `0.5` half speed, and `0` (or less) replays instantly.
+    pub(crate) fn into_response(self, speed: f64) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         if self.frames.is_empty() {
             let body = self.body.unwrap_or_default();
@@ -93,8 +96,9 @@ impl StoredResponse {
         let frames = self.frames;
         let body = Body::from_stream(async_stream::stream! {
             for frame in frames {
-                if frame.delay_ms > 0 {
-                    sleep(Duration::from_millis(frame.delay_ms)).await;
+                let ms = scale_delay(frame.delay_ms, speed);
+                if ms > 0 {
+                    sleep(Duration::from_millis(ms)).await;
                 }
                 yield Ok::<_, Infallible>(Bytes::from(frame.data));
             }
@@ -105,6 +109,20 @@ impl StoredResponse {
             .header(header::CACHE_CONTROL, "no-cache")
             .body(body)
             .expect("valid streaming response")
+    }
+}
+
+/// Scale a recorded delay by a replay-speed factor (`<= 0` means instant).
+fn scale_delay(delay_ms: u64, speed: f64) -> u64 {
+    if speed <= 0.0 {
+        return 0;
+    }
+    if (speed - 1.0).abs() < f64::EPSILON {
+        return delay_ms;
+    }
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
+    {
+        (delay_ms as f64 / speed).round() as u64
     }
 }
 
@@ -225,6 +243,10 @@ pub(crate) async fn record(
     for (name, value) in forwardable(headers) {
         builder = builder.header(name, value);
     }
+    // Start the clock before sending, so the first frame's delay captures the
+    // real time-to-first-byte (TTFT) — for streaming models that's most of the
+    // perceived latency, and `send()` blocks through it.
+    let request_start = Instant::now();
     let mut upstream = match builder.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -247,7 +269,7 @@ pub(crate) async fn record(
 
     let response = if content_type.contains("text/event-stream") {
         let mut frames = Vec::new();
-        let mut last = Instant::now();
+        let mut last = request_start;
         loop {
             match upstream.chunk().await {
                 Ok(Some(chunk)) => {
@@ -293,5 +315,6 @@ pub(crate) async fn record(
         Err(e) => tracing::error!("record: could not save cassette: {e}"),
     }
 
-    response.into_response()
+    // Serve the just-captured response back at its real timing.
+    response.into_response(1.0)
 }
