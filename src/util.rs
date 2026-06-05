@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::Rng;
-use rand::distributions::Alphanumeric;
+use rand::distr::Alphanumeric;
 
 static DETERMINISTIC: AtomicBool = AtomicBool::new(false);
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -44,8 +44,8 @@ fn suffix(len: usize) -> String {
         // Keep exactly `len` chars even if the counter ever overflows the width.
         return digits[digits.len() - len..].to_string();
     }
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
+    rand::rng()
+        .sample_iter(Alphanumeric)
         .take(len)
         .map(char::from)
         .collect()

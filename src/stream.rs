@@ -79,7 +79,7 @@ pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
     if util::is_deterministic() {
         return delay(base);
     }
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     if spec.burstiness > 0.0 {
         delay(burst_gap(base, spec.burstiness, &mut rng))
     } else if spec.jitter_ms == 0 {
@@ -87,7 +87,7 @@ pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
     } else {
         let lo = base.saturating_sub(spec.jitter_ms);
         let hi = base.saturating_add(spec.jitter_ms);
-        delay(rng.gen_range(lo..=hi))
+        delay(rng.random_range(lo..=hi))
     }
 }
 
@@ -98,12 +98,12 @@ pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
 /// mean to avoid a pathological multi-second stall.
 fn burst_gap(base: u64, burstiness: f64, rng: &mut impl Rng) -> u64 {
     let b = burstiness.clamp(0.0, 0.95);
-    if base == 0 || rng.gen_range(0.0..1.0) < b {
+    if base == 0 || rng.random_range(0.0..1.0) < b {
         return 0;
     }
     #[allow(clippy::cast_precision_loss)]
     let pause_mean = base as f64 / (1.0 - b);
-    let u: f64 = rng.gen_range(0.0..1.0);
+    let u: f64 = rng.random_range(0.0..1.0);
     let sample = (-pause_mean * (1.0 - u).ln()).min(pause_mean * 25.0);
     #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     {
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn burst_gap_preserves_mean_and_clumps() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let (base, b, n) = (20u64, 0.75, 50_000usize);
         let samples: Vec<u64> = (0..n).map(|_| burst_gap(base, b, &mut rng)).collect();
         let zero_frac = samples.iter().filter(|&&x| x == 0).count() as f64 / n as f64;
