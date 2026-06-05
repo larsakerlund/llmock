@@ -77,6 +77,23 @@ raises typed exceptions.
   cargo test
   ```
 - `unsafe_code` is forbidden.
+- `cargo deny check` is the supply-chain gate (advisories, licenses, bans,
+  sources from `deny.toml`); CI enforces it.
+- Keep `[package]` in `Cargo.toml` complete: `description`, `license`,
+  `repository`, `readme`, `keywords`, `categories`, `rust-version`. MSRV
+  (`rust-version = "1.88"`) tracks `rust-toolchain.toml`, the single channel
+  source; bump both together.
+
+## Test organization
+
+- Unit tests live inline under `#[cfg(test)] mod tests` in the module they cover.
+- In-crate black-box router tests live under `src/tests/` (`src/tests/mod.rs`
+  declares `mod wire;`/`mod cassette;`, gated by `#[cfg(test)] mod tests;` in
+  `src/main.rs`). They reach private items like `build_app`, so they stay
+  in-crate: the crate is binary-only with no public library API, and a top-level
+  `tests/` dir would see nothing to call.
+- The real-SDK end-to-end suite lives in `e2e/sdk_compat/` and is the fidelity
+  gate (see below). `e2e/` is not Cargo's integration-test dir.
 
 ## Fidelity is verified by the real SDKs
 
@@ -85,7 +102,7 @@ the real SDK parses our bytes into the expected objects, the protocol is
 faithful. Run all suites end-to-end:
 
 ```sh
-./tests/sdk_compat/run.sh
+./e2e/sdk_compat/run.sh
 ```
 
 Add SDK-compat coverage for **every** new adapter and capability (text,

@@ -32,6 +32,24 @@ in `Cargo.toml`, with a small documented allow-list. Treat a new warning as a
 build failure and fix it rather than suppress it. If a suppression is genuinely
 warranted, add it with a comment justifying why. `unsafe_code` is forbidden.
 
+## Supply-chain gate
+
+`cargo deny check` must pass. CI runs it to enforce advisories, licenses, bans,
+and sources from [`deny.toml`](deny.toml). Run it locally when you change
+dependencies:
+
+```sh
+cargo deny check
+```
+
+## Manifest
+
+Keep the `[package]` table in `Cargo.toml` complete and current:
+`description`, `license`, `repository`, `readme`, `keywords`, `categories`, and
+`rust-version`. The MSRV (`rust-version = "1.88"`) tracks
+[`rust-toolchain.toml`](rust-toolchain.toml), which stays the single source for
+the toolchain channel; bump both together.
+
 ## Fidelity is verified by the real SDKs
 
 The correctness gate is driving llmock with the genuine provider SDKs: if the
@@ -39,12 +57,27 @@ real SDK parses our bytes into the expected objects, the protocol is faithful.
 Run the suites end to end:
 
 ```sh
-./tests/sdk_compat/run.sh
+./e2e/sdk_compat/run.sh
 ```
 
 Add SDK-compat coverage for every new adapter and capability (text, streaming,
 tool calls, usage, and error injection). Never land an adapter without its
 real-SDK end-to-end test.
+
+## Test organization
+
+Tests live in three places, split by what they need to see:
+
+- **Unit tests** live inline in the module they cover, under
+  `#[cfg(test)] mod tests`.
+- **In-crate black-box router tests** live under `src/tests/`: `src/tests/mod.rs`
+  declares `mod wire;` and `mod cassette;`, gated by `#[cfg(test)] mod tests;` in
+  `src/main.rs`. They drive the assembled router and reach private items such as
+  `build_app`, so they sit in-crate rather than in a top-level `tests/`
+  directory. The crate is binary-only and exposes no library API, so a real
+  `tests/` integration dir would see nothing to call.
+- **The real-SDK end-to-end suite** lives in `e2e/` (`e2e/sdk_compat/`) and is
+  the fidelity gate, run via `./e2e/sdk_compat/run.sh`.
 
 ## Adding a provider
 
