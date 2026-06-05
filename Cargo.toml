@@ -27,7 +27,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-stream = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-tiktoken-rs = "0.6"
+tiktoken-rs = "0.12"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
