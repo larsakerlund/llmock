@@ -3,15 +3,16 @@
 use std::sync::Arc;
 
 use crate::cassette::{Cassettes, RecordConfig};
-use crate::core::StreamSpec;
+use crate::core::StreamDefaults;
 use crate::fixtures::Fixtures;
 
 /// Cheap to clone (just bumps `Arc`s), as axum requires of `State`.
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub fixtures: Arc<Fixtures>,
-    /// Streaming timing/granularity used when a fixture doesn't override it.
-    pub stream_defaults: StreamSpec,
+    /// Streaming defaults (per-model, overridable) used when a fixture doesn't
+    /// specify its own timing.
+    pub stream_defaults: StreamDefaults,
     /// Cassettes loaded at startup, matched by the same engine as fixtures.
     pub cassettes: Arc<Cassettes>,
     /// Present when recording: proxy misses to the real upstream and save them.
@@ -24,7 +25,7 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    pub(crate) fn new(fixtures: Fixtures, stream_defaults: StreamSpec) -> Self {
+    pub(crate) fn new(fixtures: Fixtures, stream_defaults: StreamDefaults) -> Self {
         AppState {
             fixtures: Arc::new(fixtures),
             stream_defaults,

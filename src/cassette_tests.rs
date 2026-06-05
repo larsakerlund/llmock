@@ -15,7 +15,7 @@ use tower::ServiceExt;
 
 use crate::build_app;
 use crate::cassette::{Cassette, Cassettes, RecordConfig};
-use crate::core::StreamSpec;
+use crate::core::StreamDefaults;
 use crate::fixtures::Fixtures;
 use crate::state::AppState;
 
@@ -33,7 +33,8 @@ fn app_with(dir: &Path, record: Option<RecordConfig>) -> Router {
 fn app_with_speed(dir: &Path, record: Option<RecordConfig>, speed: f64) -> Router {
     let store = Cassettes::load(dir).expect("load cassettes");
     let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
-    let state = AppState::new(fixtures, StreamSpec::default()).with_cassettes(store, record, speed);
+    let state =
+        AppState::new(fixtures, StreamDefaults::instant()).with_cassettes(store, record, speed);
     build_app(state)
 }
 

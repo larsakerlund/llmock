@@ -25,33 +25,34 @@ pub(crate) struct Config {
     #[arg(long, env = "LLMOCK_FIXTURES")]
     pub fixtures: Option<PathBuf>,
 
-    /// Default time-to-first-token for streaming, in ms. The default is a
-    /// realistic value measured from real models (TTFT dominates streaming
-    /// latency); set `0` for instant streaming in fast test suites. Overridden
-    /// per-rule by a fixture's `stream.ttft_ms`.
-    #[arg(long, env = "LLMOCK_TTFT_MS", default_value_t = 700)]
-    pub default_ttft_ms: u64,
+    /// Time-to-first-token for streaming, in ms. Unset uses a realistic
+    /// per-model default (TTFT dominates streaming latency); set `0` for instant
+    /// streaming in fast test suites. Overridden per-rule by `stream.ttft_ms`.
+    #[arg(long, env = "LLMOCK_TTFT_MS")]
+    pub default_ttft_ms: Option<u64>,
 
-    /// Default delay between streamed deltas, in ms. Overridden per-rule by a
-    /// fixture's `stream.inter_token_ms`.
-    #[arg(long, env = "LLMOCK_INTER_TOKEN_MS", default_value_t = 20)]
-    pub default_inter_token_ms: u64,
+    /// Delay between streamed deltas, in ms. Unset uses the per-model default.
+    /// Overridden per-rule by `stream.inter_token_ms`.
+    #[arg(long, env = "LLMOCK_INTER_TOKEN_MS")]
+    pub default_inter_token_ms: Option<u64>,
 
-    /// Default random +/- variation on each inter-token delay, in ms (used only
-    /// when burstiness is 0). Overridden per-rule by `stream.jitter_ms`.
-    #[arg(long, env = "LLMOCK_JITTER_MS", default_value_t = 20)]
-    pub default_jitter_ms: u64,
+    /// Random +/- variation on each inter-token delay, in ms (used only when
+    /// burstiness is 0). Overridden per-rule by `stream.jitter_ms`.
+    #[arg(long, env = "LLMOCK_JITTER_MS")]
+    pub default_jitter_ms: Option<u64>,
 
-    /// Default stream burstiness (0..1): 0 = even pacing, higher clumps tokens
-    /// into bursts with occasional pauses like a real model, keeping the average
-    /// gap at `inter_token_ms`. Overridden per-rule by `stream.burstiness`.
-    #[arg(long, env = "LLMOCK_BURSTINESS", default_value_t = 0.7)]
-    pub default_burstiness: f64,
+    /// Stream burstiness (0..1): 0 = even pacing, higher clumps tokens into
+    /// bursts with occasional pauses like a real model, keeping the average gap
+    /// at `inter_token_ms`. Unset uses the per-model default. Overridden per-rule
+    /// by `stream.burstiness`.
+    #[arg(long, env = "LLMOCK_BURSTINESS")]
+    pub default_burstiness: Option<f64>,
 
-    /// Default streaming granularity: `word`, `char`, or a positive integer
-    /// (characters per chunk). Overridden per-rule by `stream.chunk_by`.
-    #[arg(long, env = "LLMOCK_CHUNK_BY", default_value = "word")]
-    pub default_chunk_by: String,
+    /// Streaming granularity: `word`, `char`, or a positive integer (characters
+    /// per chunk). Unset uses the per-model default. Overridden per-rule by
+    /// `stream.chunk_by`.
+    #[arg(long, env = "LLMOCK_CHUNK_BY")]
+    pub default_chunk_by: Option<String>,
 
     /// Make ids and timestamps reproducible (monotonic counter, fixed time) so
     /// responses are byte-stable — useful for snapshot testing.
@@ -82,14 +83,19 @@ pub(crate) struct Config {
 }
 
 impl Config {
-    /// Resolve the global streaming defaults, validating `default_chunk_by`.
-    pub(crate) fn stream_defaults(&self) -> Result<crate::core::StreamSpec, String> {
-        Ok(crate::core::StreamSpec {
+    /// Collect the global streaming defaults, validating `default_chunk_by` if
+    /// it was set. Unset fields stay `None` (resolved per-model at request time).
+    pub(crate) fn stream_defaults(&self) -> Result<crate::core::StreamDefaults, String> {
+        let chunk_by = match &self.default_chunk_by {
+            Some(s) => Some(crate::core::ChunkBy::parse(s)?),
+            None => None,
+        };
+        Ok(crate::core::StreamDefaults {
             ttft_ms: self.default_ttft_ms,
             inter_token_ms: self.default_inter_token_ms,
             jitter_ms: self.default_jitter_ms,
             burstiness: self.default_burstiness,
-            chunk_by: crate::core::ChunkBy::parse(&self.default_chunk_by)?,
+            chunk_by,
         })
     }
 }

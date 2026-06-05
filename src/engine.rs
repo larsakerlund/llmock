@@ -57,7 +57,7 @@ pub(crate) async fn resolve(
         );
     }
     // 3. Otherwise the fixture engine decides.
-    match state.fixtures.outcome_for(req, state.stream_defaults) {
+    match state.fixtures.outcome_for(req, &state.stream_defaults) {
         Some(Outcome::Respond(r)) => Resolution::Synthesize(Box::new(r)),
         Some(Outcome::Error(e)) => Resolution::Error(e),
         None => Resolution::NoMatch,

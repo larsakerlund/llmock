@@ -127,6 +127,76 @@ impl Default for StreamSpec {
     }
 }
 
+/// Server-wide streaming defaults. Each field is optional: when unset, the
+/// value is taken from a realistic per-model table (with a generic fallback);
+/// when set (e.g. via `--default-ttft-ms`), it applies to every model. A
+/// fixture's own `stream:` block overrides whatever this resolves to.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct StreamDefaults {
+    pub ttft_ms: Option<u64>,
+    pub inter_token_ms: Option<u64>,
+    pub jitter_ms: Option<u64>,
+    pub burstiness: Option<f64>,
+    pub chunk_by: Option<ChunkBy>,
+}
+
+impl StreamDefaults {
+    /// All-zero timing (instant streaming) — for tests and `--default-*-ms 0`.
+    #[cfg(test)]
+    pub(crate) fn instant() -> Self {
+        StreamDefaults {
+            ttft_ms: Some(0),
+            inter_token_ms: Some(0),
+            jitter_ms: Some(0),
+            burstiness: Some(0.0),
+            chunk_by: Some(ChunkBy::Word),
+        }
+    }
+
+    /// Resolve to a concrete spec for `model`: explicit fields win, otherwise
+    /// the per-model defaults apply.
+    pub(crate) fn resolve(&self, model: &str) -> StreamSpec {
+        let m = model_stream_defaults(model);
+        StreamSpec {
+            ttft_ms: self.ttft_ms.unwrap_or(m.ttft_ms),
+            inter_token_ms: self.inter_token_ms.unwrap_or(m.inter_token_ms),
+            jitter_ms: self.jitter_ms.unwrap_or(m.jitter_ms),
+            burstiness: self.burstiness.unwrap_or(m.burstiness),
+            chunk_by: self.chunk_by.unwrap_or(m.chunk_by),
+        }
+    }
+}
+
+/// Realistic streaming defaults per model, measured from real APIs where we
+/// have data, with a generic fallback. Timing varies run-to-run and by
+/// region/load, so these are approximate averages — anything explicit overrides
+/// them.
+fn model_stream_defaults(model: &str) -> StreamSpec {
+    let m = model.to_ascii_lowercase();
+    let (ttft_ms, inter_token_ms, burstiness) = if m.contains("gpt-4o") || m.starts_with("gpt-4") {
+        (1000, 15, 0.75)
+    } else if m.starts_with("gpt-5") && (m.contains("nano") || m.contains("mini")) {
+        (650, 12, 0.80)
+    } else if m.starts_with("gpt-5") || m.starts_with("o1") || m.starts_with("o3") {
+        (900, 12, 0.75)
+    } else if m.contains("haiku") {
+        (1000, 40, 0.60)
+    } else if m.contains("claude") {
+        (1200, 30, 0.60)
+    } else if m.contains("gemini") {
+        (600, 20, 0.70)
+    } else {
+        (700, 20, 0.70) // generic fallback for unknown models
+    };
+    StreamSpec {
+        ttft_ms,
+        inter_token_ms,
+        jitter_ms: 20,
+        burstiness,
+        chunk_by: ChunkBy::Word,
+    }
+}
+
 /// A mid-stream fault to inject (only meaningful for streaming responses).
 /// `after` counts content deltas emitted before the fault triggers.
 #[derive(Debug, Clone, Copy)]

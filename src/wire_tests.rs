@@ -32,7 +32,10 @@ rules:
 
 fn app() -> Router {
     let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
-    build_app(AppState::new(fixtures, crate::core::StreamSpec::default()))
+    build_app(AppState::new(
+        fixtures,
+        crate::core::StreamDefaults::instant(),
+    ))
 }
 
 /// Replace random ids and timestamps with stable placeholders.

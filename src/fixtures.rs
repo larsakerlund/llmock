@@ -10,8 +10,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
-    ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason, StreamSpec,
-    ToolCall, Usage,
+    ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason,
+    StreamDefaults, ToolCall, Usage,
 };
 use crate::util;
 
@@ -330,7 +330,7 @@ impl Fixtures {
     pub(crate) fn outcome_for(
         &self,
         req: &NeutralRequest,
-        defaults: StreamSpec,
+        defaults: &StreamDefaults,
     ) -> Option<Outcome> {
         let rule = self.rules.iter().find(|r| r.match_.matches(req))?;
 
@@ -378,8 +378,8 @@ impl Fixtures {
             None => StopReason::Stop,
         };
 
-        // Resolve streaming spec: start from defaults, apply per-rule overrides.
-        let mut spec = defaults;
+        // Resolve streaming spec: per-model defaults, then per-rule overrides.
+        let mut spec = defaults.resolve(&req.model);
         if let Some(fs) = &respond.stream {
             if let Some(t) = fs.ttft_ms {
                 spec.ttft_ms = t;
