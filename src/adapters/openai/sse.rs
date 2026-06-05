@@ -21,7 +21,7 @@ use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
 use crate::sse::{data as frame, execute_fault, fault_after};
-use crate::stream::{chunk_text, delay};
+use crate::stream::{chunk_text, inter_token_delay, step_delay};
 use crate::util;
 
 use super::response::{finish_reason_str, Usage};
@@ -77,7 +77,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
                     break;
                 }
             }
-            if let Some(d) = delay(if i == 0 { spec.ttft_ms } else { spec.inter_token_ms }) {
+            if let Some(d) = step_delay(&spec, i) {
                 sleep(d).await;
             }
             let chunk = Chunk {
@@ -116,7 +116,8 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
         let ttft_for_tools = pieces.is_empty();
         for (idx, tc) in tool_calls.iter().enumerate() {
             let first_tool_emission = ttft_for_tools && idx == 0;
-            if let Some(d) = delay(if first_tool_emission { spec.ttft_ms } else { spec.inter_token_ms }) {
+            // index 0 => TTFT, anything else => jittered inter-token delay.
+            if let Some(d) = step_delay(&spec, usize::from(!first_tool_emission)) {
                 sleep(d).await;
             }
             let opening = Chunk {
@@ -141,7 +142,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
             yield Ok(frame(&opening));
 
             for frag in chunk_text(&tc.arguments, spec.chunk_by) {
-                if let Some(d) = delay(spec.inter_token_ms) {
+                if let Some(d) = inter_token_delay(&spec) {
                     sleep(d).await;
                 }
                 let arg_chunk = Chunk {

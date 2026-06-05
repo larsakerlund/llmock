@@ -21,8 +21,12 @@ pub(crate) fn enable_deterministic() {
     DETERMINISTIC.store(true, Ordering::Relaxed);
 }
 
-fn deterministic() -> bool {
+pub(crate) fn is_deterministic() -> bool {
     DETERMINISTIC.load(Ordering::Relaxed)
+}
+
+fn deterministic() -> bool {
+    is_deterministic()
 }
 
 /// Seconds since the Unix epoch (fixed in deterministic mode).

@@ -4,7 +4,10 @@
 
 use std::time::Duration;
 
-use crate::core::ChunkBy;
+use rand::Rng;
+
+use crate::core::{ChunkBy, StreamSpec};
+use crate::util;
 
 /// Split `content` into the ordered pieces that will become individual deltas.
 ///
@@ -55,6 +58,29 @@ pub(crate) fn delay(ms: u64) -> Option<Duration> {
     } else {
         Some(Duration::from_millis(ms))
     }
+}
+
+/// Delay before the delta at `index`: TTFT for the first, otherwise a jittered
+/// inter-token delay.
+pub(crate) fn step_delay(spec: &StreamSpec, index: usize) -> Option<Duration> {
+    if index == 0 {
+        delay(spec.ttft_ms)
+    } else {
+        inter_token_delay(spec)
+    }
+}
+
+/// A single inter-token delay with `jitter_ms` of uniform +/- variation, so a
+/// synthesized stream's cadence isn't perfectly even. Jitter is disabled in
+/// deterministic mode for reproducible runs.
+pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
+    let base = spec.inter_token_ms;
+    if spec.jitter_ms == 0 || util::is_deterministic() {
+        return delay(base);
+    }
+    let lo = base.saturating_sub(spec.jitter_ms);
+    let hi = base.saturating_add(spec.jitter_ms);
+    delay(rand::thread_rng().gen_range(lo..=hi))
 }
 
 #[cfg(test)]

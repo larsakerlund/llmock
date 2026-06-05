@@ -105,6 +105,9 @@ pub(crate) struct StreamSpec {
     pub ttft_ms: u64,
     /// Delay between subsequent content deltas, in ms.
     pub inter_token_ms: u64,
+    /// Random +/- variation applied to each inter-token delay, in ms, so the
+    /// cadence looks real rather than perfectly even.
+    pub jitter_ms: u64,
     pub chunk_by: ChunkBy,
 }
 
@@ -113,6 +116,7 @@ impl Default for StreamSpec {
         StreamSpec {
             ttft_ms: 0,
             inter_token_ms: 0,
+            jitter_ms: 0,
             chunk_by: ChunkBy::Word,
         }
     }

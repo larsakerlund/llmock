@@ -22,7 +22,7 @@ use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
 use crate::sse::{event, execute_fault, fault_after};
-use crate::stream::{chunk_text, delay};
+use crate::stream::{chunk_text, inter_token_delay, step_delay};
 use crate::util;
 
 use super::response::{stop_reason_str, ContentBlock, TextBlock, ToolUseBlock, Usage};
@@ -78,7 +78,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
                 if let Some(f) = fault {
                     if fault_after(f) == i { triggered = Some(f); break; }
                 }
-                if let Some(d) = delay(if i == 0 { spec.ttft_ms } else { spec.inter_token_ms }) {
+                if let Some(d) = step_delay(&spec, i) {
                     sleep(d).await;
                 }
                 yield Ok(event("content_block_delta", &ContentBlockDelta {
@@ -123,7 +123,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
 
             // Arguments stream as partial_json fragments.
             for frag in chunk_text(&tc.arguments, spec.chunk_by) {
-                if let Some(d) = delay(spec.inter_token_ms) { sleep(d).await; }
+                if let Some(d) = inter_token_delay(&spec) { sleep(d).await; }
                 yield Ok(event("content_block_delta", &ContentBlockDelta {
                     event_type: "content_block_delta", index,
                     delta: DeltaKind::InputJson { delta_type: "input_json_delta", partial_json: frag },

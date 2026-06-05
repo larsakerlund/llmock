@@ -73,12 +73,16 @@ native SSE stream. A rule can shape the timing and granularity:
       stream:
         ttft_ms: 50          # delay before the first token
         inter_token_ms: 10   # delay between tokens
+        jitter_ms: 8         # random +/- variation per gap, so it isn't robotic
         chunk_by: word       # word | char | <positive integer> (chars/chunk)
 ```
 
-Server-wide defaults (used when a rule doesn't override) come from flags/env:
-`--default-ttft-ms`, `--default-inter-token-ms`, `--default-chunk-by` — handy for
-applying realistic latency fleet-wide without editing fixtures.
+`jitter_ms` adds uniform `±jitter` random variation to each inter-token delay so
+a synthesized stream paces unevenly like a real one (disabled under
+`--deterministic` for reproducible runs). Server-wide defaults come from
+flags/env: `--default-ttft-ms`, `--default-inter-token-ms`, `--default-jitter-ms`,
+`--default-chunk-by` — handy for applying realistic latency fleet-wide without
+editing fixtures.
 
 ### Error & failure injection
 

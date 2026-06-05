@@ -13,7 +13,7 @@ use tokio::time::sleep;
 
 use crate::core::{Fault, NeutralResponse};
 use crate::sse::{data as frame, execute_fault, fault_after};
-use crate::stream::{chunk_text, delay};
+use crate::stream::{chunk_text, inter_token_delay, step_delay};
 
 use super::response::{
     finish_reason_str, parse_args, usage_metadata, Candidate, ContentOut, FunctionCall,
@@ -51,7 +51,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
             if let Some(f) = fault {
                 if fault_after(f) == i { triggered = Some(f); break; }
             }
-            if let Some(d) = delay(if i == 0 { spec.ttft_ms } else { spec.inter_token_ms }) {
+            if let Some(d) = step_delay(&spec, i) {
                 sleep(d).await;
             }
             yield Ok::<_, Infallible>(frame(&text_chunk(piece.clone(), &resp.model)));
@@ -71,7 +71,7 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
 
         // One chunk per function call.
         for tc in &resp.tool_calls {
-            if let Some(d) = delay(spec.inter_token_ms) { sleep(d).await; }
+            if let Some(d) = inter_token_delay(&spec) { sleep(d).await; }
             let chunk = GenerateContentResponse {
                 candidates: vec![Candidate {
                     content: ContentOut {

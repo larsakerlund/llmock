@@ -35,6 +35,12 @@ pub(crate) struct Config {
     #[arg(long, env = "LLMOCK_INTER_TOKEN_MS", default_value_t = 0)]
     pub default_inter_token_ms: u64,
 
+    /// Default random +/- variation on each inter-token delay, in ms, so
+    /// synthesized streams don't pace perfectly evenly. Overridden per-rule by
+    /// `stream.jitter_ms`.
+    #[arg(long, env = "LLMOCK_JITTER_MS", default_value_t = 0)]
+    pub default_jitter_ms: u64,
+
     /// Default streaming granularity: `word`, `char`, or a positive integer
     /// (characters per chunk). Overridden per-rule by `stream.chunk_by`.
     #[arg(long, env = "LLMOCK_CHUNK_BY", default_value = "word")]
@@ -74,6 +80,7 @@ impl Config {
         Ok(crate::core::StreamSpec {
             ttft_ms: self.default_ttft_ms,
             inter_token_ms: self.default_inter_token_ms,
+            jitter_ms: self.default_jitter_ms,
             chunk_by: crate::core::ChunkBy::parse(&self.default_chunk_by)?,
         })
     }
