@@ -5,13 +5,22 @@ edition = "2021"
 description = "Fast, byte-faithful emulator of LLM provider HTTP APIs for testing apps without a real LLM."
 license = "MIT"
 repository = "https://github.com/larsakerlund/llmock"
+homepage = "https://github.com/larsakerlund/llmock"
+readme = "README.md"
+rust-version = "1.88"
+keywords = ["llm", "mock", "testing", "emulator", "openai"]
+categories = [
+    "development-tools::testing",
+    "web-programming::http-server",
+    "emulators",
+]
 
 [dependencies]
 axum = "0.8"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
+serde_yaml = { package = "serde_yaml_ng", version = "0.10" }
 clap = { version = "4", features = ["derive", "env"] }
 rand = "0.8"
 tracing = "0.1"
