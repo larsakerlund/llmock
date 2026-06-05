@@ -34,9 +34,9 @@ for _ in $(seq 1 50); do
   sleep 0.2
 done
 
-export LLMOCK_BASE_URL="http://127.0.0.1:$PORT/v1"
-export LLMOCK_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
-export LLMOCK_GEMINI_BASE_URL="http://127.0.0.1:$PORT"
+export LLMOCK_BASE_URL="http://127.0.0.1:$PORT/openai/v1"
+export LLMOCK_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT/anthropic"
+export LLMOCK_GEMINI_BASE_URL="http://127.0.0.1:$PORT/gemini"
 echo
 echo "== OpenAI Chat Completions API =="
 "$VENV/bin/python" tests/sdk_compat/test_openai.py

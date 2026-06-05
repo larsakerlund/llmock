@@ -61,7 +61,7 @@ Then point any OpenAI client at it:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="sk-llmock-dummy")
+client = OpenAI(base_url="http://127.0.0.1:8080/openai/v1", api_key="sk-llmock-dummy")
 print(client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "what's the weather?"}],
@@ -206,10 +206,10 @@ request that matches a cassette is replayed before fixtures are consulted.
 
    | Provider | SDK base URL | Auth header forwarded |
    |----------|--------------|-----------------------|
-   | OpenAI | `http://localhost:8080/v1` | `Authorization: Bearer` |
+   | OpenAI | `http://localhost:8080/openai/v1` | `Authorization: Bearer` |
    | Azure OpenAI | `http://localhost:8080/openai/v1` + `--upstream https://<resource>.openai.azure.com/openai` | `api-key` (or `Authorization`) |
-   | Anthropic | `http://localhost:8080` | `x-api-key` |
-   | Gemini (`google-genai`) | `http://localhost:8080` via `HttpOptions(base_url=…)` | `x-goog-api-key` |
+   | Anthropic | `http://localhost:8080/anthropic` | `x-api-key` |
+   | Gemini (`google-genai`) | `http://localhost:8080/gemini` via `HttpOptions(base_url=…)` | `x-goog-api-key` |
 
 3. Make your normal calls. Each request with no matching cassette is proxied to
    the real provider (chosen by endpoint, or by `--upstream`), saved under
@@ -266,25 +266,27 @@ cases.
 
 ## Endpoints
 
+Every provider is served only under its own `/{provider}` prefix. There is no
+root fallback.
+
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
-| POST | `/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. |
-| POST | `/v1/messages` | Anthropic Messages API: `message_start`/`content_block_*`/`message_delta`/`message_stop` streaming and non-streaming; text and tool use. `x-api-key`/`anthropic-version` accepted and ignored. |
-| POST | `/v1beta/models/{model}:generateContent` | Google Gemini: non-streaming `generateContent`. |
-| POST | `/v1beta/models/{model}:streamGenerateContent` | Google Gemini: streaming (`?alt=sse`); text and function calls. |
-| GET  | `/v1/models` | Lists a default model catalogue. |
-| GET  | `/v1/models/{id}` | Returns a model object for any id (lenient). |
-| GET  | `/healthz` | Liveness probe (not part of the emulated surface). |
+| POST | `/openai/v1/chat/completions` | Streaming (`stream: true`, incl. `stream_options.include_usage`) and non-streaming; text, tool calls, errors, and faults. |
+| POST | `/openai/v1/responses` | OpenAI Responses API: full `response.*` streaming event lifecycle and non-streaming; text and tool calls. |
+| POST | `/anthropic/v1/messages` | Anthropic Messages API: `message_start`/`content_block_*`/`message_delta`/`message_stop` streaming and non-streaming; text and tool use. `x-api-key`/`anthropic-version` accepted and ignored. |
+| POST | `/gemini/v1beta/models/{model}:generateContent` | Google Gemini: non-streaming `generateContent`. |
+| POST | `/gemini/v1beta/models/{model}:streamGenerateContent` | Google Gemini: streaming (`?alt=sse`); text and function calls. |
+| GET  | `/openai/v1/models` | Lists a default model catalogue. |
+| GET  | `/openai/v1/models/{id}` | Returns a model object for any id (lenient). |
+| GET  | `/healthz` | Liveness probe (not part of the emulated surface; stays at root). |
 
 The same fixture rules drive every endpoint, so you author once and test
-whichever API (and provider) your app calls. Point each SDK's base URL at llmock:
-OpenAI at `http://host:8080/v1`, Anthropic at `http://host:8080`, and Gemini
-(google-genai) at `http://host:8080` via `HttpOptions(base_url=…)`.
-
-Every provider is also mounted under a `/{provider}` prefix (`…/openai/v1`,
-`…/anthropic`, `…/gemini`) for unambiguous routing when you run several providers
-behind one llmock. Both the root and prefixed paths work.
+whichever API (and provider) your app calls. Point each SDK's base URL at its
+provider prefix: OpenAI at `http://host:8080/openai/v1`, Anthropic at
+`http://host:8080/anthropic`, and Gemini (google-genai) at
+`http://host:8080/gemini` via `HttpOptions(base_url=…)`. See
+[ARCHITECTURE.md](ARCHITECTURE.md#routing-is-prefix-only) for why routing is
+prefix-only.
 
 ## Fidelity
 

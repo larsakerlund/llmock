@@ -15,7 +15,7 @@ import sys
 
 from openai import AuthenticationError, OpenAI, RateLimitError
 
-BASE_URL = os.environ.get("LLMOCK_BASE_URL", "http://127.0.0.1:8080/v1")
+BASE_URL = os.environ.get("LLMOCK_BASE_URL", "http://127.0.0.1:8080/openai/v1")
 
 client = OpenAI(base_url=BASE_URL, api_key="sk-llmock-dummy")
 

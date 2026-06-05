@@ -5,7 +5,7 @@ neutral core serializes a fundamentally different wire format (named events,
 content_block lifecycle, split usage, distinct error envelope) faithfully.
 
 Run llmock first, then:
-    LLMOCK_ANTHROPIC_BASE_URL=http://127.0.0.1:8085 \
+    LLMOCK_ANTHROPIC_BASE_URL=http://127.0.0.1:8085/anthropic \
         tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_anthropic.py
 """
 
@@ -15,7 +15,7 @@ import sys
 
 from anthropic import Anthropic, AuthenticationError, RateLimitError
 
-BASE_URL = os.environ.get("LLMOCK_ANTHROPIC_BASE_URL", "http://127.0.0.1:8080")
+BASE_URL = os.environ.get("LLMOCK_ANTHROPIC_BASE_URL", "http://127.0.0.1:8080/anthropic")
 client = Anthropic(base_url=BASE_URL, api_key="sk-ant-llmock-dummy")
 MODEL = "claude-opus-4-8"
 

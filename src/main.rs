@@ -97,19 +97,16 @@ fn exit_on_error<T>(r: Result<T, String>) -> T {
     })
 }
 
-/// Assemble the full router over the given state. Each provider is mounted both
-/// at the real root paths (drop-in: point an SDK's base URL straight at the
-/// host) and under a `/{provider}` prefix (unambiguous for multi-provider
-/// setups, e.g. base URL `http://host/openai`). Shared by `main` and the
-/// in-process tests.
+/// Assemble the full router over the given state. Each provider is served only
+/// under its `/{provider}` prefix (e.g. base URL `http://host/openai`); root no
+/// longer carries any provider APIs. We emulate many providers that share the
+/// `/v1/` namespace (OpenAI and Anthropic both define `/v1/models`, etc.), so
+/// mounting them all at root would collide; the prefix makes routing
+/// unambiguous. Shared by `main` and the in-process tests.
 fn build_app(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
-        // Root mounts.
-        .merge(adapters::openai::router())
-        .merge(adapters::anthropic::router())
-        .merge(adapters::gemini::router())
-        // Provider-prefixed aliases.
+        // Provider-prefixed mounts.
         .nest("/openai", adapters::openai::router())
         .nest("/anthropic", adapters::anthropic::router())
         .nest("/gemini", adapters::gemini::router())

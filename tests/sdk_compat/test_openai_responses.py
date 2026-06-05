@@ -5,7 +5,7 @@ the real SDK parses our `response` object and `response.*` stream events into
 the expected values, our wire format is faithful to spec.
 
 Run llmock first, then:
-    LLMOCK_BASE_URL=http://127.0.0.1:8084/v1 \
+    LLMOCK_BASE_URL=http://127.0.0.1:8084/openai/v1 \
         tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_openai_responses.py
 """
 
@@ -15,7 +15,7 @@ import sys
 
 from openai import OpenAI
 
-BASE_URL = os.environ.get("LLMOCK_BASE_URL", "http://127.0.0.1:8080/v1")
+BASE_URL = os.environ.get("LLMOCK_BASE_URL", "http://127.0.0.1:8080/openai/v1")
 client = OpenAI(base_url=BASE_URL, api_key="sk-llmock-dummy")
 
 ok = True

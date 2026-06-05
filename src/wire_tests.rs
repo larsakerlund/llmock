@@ -67,7 +67,7 @@ async fn post(uri: &str, body: &str) -> (StatusCode, String) {
 #[tokio::test]
 async fn openai_chat_non_stream_text() {
     let (status, out) = post(
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
@@ -81,7 +81,7 @@ async fn openai_chat_non_stream_text() {
 #[tokio::test]
 async fn openai_chat_stream_text() {
     let (status, out) = post(
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
@@ -100,7 +100,7 @@ async fn openai_chat_stream_text() {
 #[tokio::test]
 async fn openai_chat_stream_tool() {
     let (status, out) = post(
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"forecast"}]}"#,
     )
     .await;
@@ -118,7 +118,7 @@ async fn openai_chat_stream_tool() {
 #[tokio::test]
 async fn anthropic_non_stream_text() {
     let (status, out) = post(
-        "/v1/messages",
+        "/anthropic/v1/messages",
         r#"{"model":"claude-opus-4-8","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
@@ -132,7 +132,7 @@ async fn anthropic_non_stream_text() {
 #[tokio::test]
 async fn anthropic_stream_text() {
     let (status, out) = post(
-        "/v1/messages",
+        "/anthropic/v1/messages",
         r#"{"model":"claude-opus-4-8","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
@@ -154,7 +154,7 @@ async fn anthropic_stream_text() {
 #[tokio::test]
 async fn gemini_non_stream_text() {
     let (status, out) = post(
-        "/v1beta/models/gemini-2.0-flash:generateContent",
+        "/gemini/v1beta/models/gemini-2.0-flash:generateContent",
         r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
     )
     .await;
@@ -168,7 +168,7 @@ async fn gemini_non_stream_text() {
 #[tokio::test]
 async fn gemini_stream_text() {
     let (status, out) = post(
-        "/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "/gemini/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
     )
     .await;
@@ -184,7 +184,7 @@ async fn gemini_stream_text() {
 
 #[tokio::test]
 async fn responses_non_stream_text() {
-    let (status, out) = post("/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#).await;
+    let (status, out) = post("/openai/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         out,
@@ -195,7 +195,7 @@ async fn responses_non_stream_text() {
 #[tokio::test]
 async fn responses_stream_text() {
     let (status, out) = post(
-        "/v1/responses",
+        "/openai/v1/responses",
         r#"{"model":"gpt-4o","stream":true,"input":"hi"}"#,
     )
     .await;
@@ -251,6 +251,31 @@ async fn provider_prefixes_route_to_the_right_adapter() {
         out.contains("\"modelVersion\":\"gemini-2.0-flash\""),
         "{out}"
     );
+
+    // Root no longer carries any provider API: the old unprefixed paths 404.
+    let (status, _) = post(
+        "/v1/chat/completions",
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = post("/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = post(
+        "/v1/messages",
+        r#"{"model":"claude-opus-4-8","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = post(
+        "/v1beta/models/gemini-2.0-flash:generateContent",
+        r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 /// Regeneration helper: prints redacted output for representative cases.
@@ -258,9 +283,9 @@ async fn provider_prefixes_route_to_the_right_adapter() {
 #[ignore = "prints golden output for manual regeneration"]
 async fn dump() {
     let cases: &[(&str, &str)] = &[
-        ("/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#),
+        ("/openai/v1/responses", r#"{"model":"gpt-4o","input":"hi"}"#),
         (
-            "/v1/responses",
+            "/openai/v1/responses",
             r#"{"model":"gpt-4o","stream":true,"input":"hi"}"#,
         ),
     ];

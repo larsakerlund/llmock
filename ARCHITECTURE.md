@@ -83,6 +83,20 @@ src/util.rs                  id/timestamp helpers
 src/main.rs                  server wiring + routing
 ```
 
+## Routing is prefix-only
+
+Every provider is served only under its own `/{provider}` prefix: OpenAI at
+`/openai/v1/…`, Anthropic at `/anthropic/v1/messages`, and Gemini at
+`/gemini/v1beta/…`. `/healthz` stays at root because it is a liveness probe, not
+a provider API.
+
+The providers llmock emulates share the `/v1/` namespace: OpenAI and Anthropic
+both define `/v1/models`, for example. Mounting them all at root worked only
+while their leaf paths stayed disjoint and would panic on the first collision.
+Callers set `base_url` to reach llmock regardless, so the `/{provider}` prefix
+costs nothing and makes collisions impossible. This is an intentional breaking
+change from the earlier root-mounted scheme.
+
 Adapters are grouped by vendor. A vendor with one wire format (`anthropic`,
 `gemini`) is a single module; a vendor with several (`openai`, which serves Chat
 Completions, the Responses API, and Models) keeps each wire format as a submodule

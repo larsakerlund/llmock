@@ -132,7 +132,7 @@ async fn replay_matches_like_a_fixture_and_misses_fall_through() {
     // Same model + a message *containing* "weather" replays (not exact body).
     let (status, ct, body) = post(
         app_with(dir.path(), None),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","messages":[{"role":"user","content":"what is the weather today?"}]}"#,
     )
     .await;
@@ -146,7 +146,7 @@ async fn replay_matches_like_a_fixture_and_misses_fall_through() {
     // Different model misses (endpoint+model scope), falls to the fixture.
     let (_, _, body) = post(
         app_with(dir.path(), None),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o-mini","messages":[{"role":"user","content":"weather?"}]}"#,
     )
     .await;
@@ -155,7 +155,7 @@ async fn replay_matches_like_a_fixture_and_misses_fall_through() {
     // A streaming request does not replay a non-streaming cassette.
     let (_, ct, _) = post(
         app_with(dir.path(), None),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"weather?"}]}"#,
     )
     .await;
@@ -172,7 +172,7 @@ async fn record_proxies_saves_with_derived_match_then_replays() {
 
     let (status, _, body) = post(
         app_with(dir.path(), Some(record_to(dir.path(), &upstream))),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","messages":[{"role":"user","content":"record me"}]}"#,
     )
     .await;
@@ -187,7 +187,7 @@ async fn record_proxies_saves_with_derived_match_then_replays() {
     // Replay-only: a request that *contains* the recorded message replays.
     let (_, _, body) = post(
         app_with(dir.path(), None),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","messages":[{"role":"user","content":"please record me now"}]}"#,
     )
     .await;
@@ -206,7 +206,7 @@ async fn record_streaming_captures_timed_frames_and_replays() {
 
     let (status, ct, body) = post(
         app_with(dir.path(), Some(record_to(dir.path(), &upstream))),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#,
     )
     .await;
@@ -232,7 +232,12 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     let body_req =
         r#"{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}"#;
     let start = std::time::Instant::now();
-    let (_, _, body) = post(app_with(dir.path(), None), "/v1/chat/completions", body_req).await;
+    let (_, _, body) = post(
+        app_with(dir.path(), None),
+        "/openai/v1/chat/completions",
+        body_req,
+    )
+    .await;
     assert_eq!(body, chunks.concat());
     assert!(start.elapsed() >= Duration::from_millis(40));
 
@@ -240,7 +245,7 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     let start = std::time::Instant::now();
     let (_, _, body) = post(
         app_with_speed(dir.path(), None, 0.0),
-        "/v1/chat/completions",
+        "/openai/v1/chat/completions",
         body_req,
     )
     .await;

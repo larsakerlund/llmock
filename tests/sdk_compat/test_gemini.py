@@ -5,7 +5,7 @@ URL-encoded action (`:generateContent`), camelCase wire fields, and a Google
 error envelope. If the real SDK parses our bytes, the protocol is faithful.
 
 Run llmock first, then:
-    LLMOCK_GEMINI_BASE_URL=http://127.0.0.1:8086 \
+    LLMOCK_GEMINI_BASE_URL=http://127.0.0.1:8086/gemini \
         tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_gemini.py
 """
 
@@ -16,7 +16,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-BASE_URL = os.environ.get("LLMOCK_GEMINI_BASE_URL", "http://127.0.0.1:8080")
+BASE_URL = os.environ.get("LLMOCK_GEMINI_BASE_URL", "http://127.0.0.1:8080/gemini")
 client = genai.Client(api_key="llmock-dummy", http_options=types.HttpOptions(base_url=BASE_URL))
 MODEL = "gemini-2.0-flash"
 
