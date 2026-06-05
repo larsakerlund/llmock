@@ -1,18 +1,20 @@
 version: 2
 
 # Keep dependencies and pinned references current. Commit prefixes follow the
-# project's Conventional Commit types: deps for the app's runtime crates, build
-# for dev-dependencies and the base images, ci for the workflow actions.
+# project's Conventional Commit types where the ecosystem allows it.
 updates:
-  # Rust crates. Dependabot splits runtime and dev dependencies, so they land
-  # under the right changelog section (deps vs build).
+  # Rust crates. Cargo does not support a separate prefix for dev-dependencies
+  # (prefix-development and the production/development dependency-type filters
+  # are unsupported for cargo), so every crate bump lands as `deps`. The runtime
+  # crates are the point of that changelog section; relabel an occasional
+  # dev-dependency bump (tower, tempfile, ...) to `build` at merge if you want it
+  # out of the changelog.
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: weekly
     commit-message:
       prefix: deps
-      prefix-development: build
     groups:
       cargo-minor:
         update-types: ["minor", "patch"]
