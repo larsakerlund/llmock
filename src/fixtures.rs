@@ -180,6 +180,7 @@ pub(crate) struct FixtureStream {
     pub ttft_ms: Option<u64>,
     pub inter_token_ms: Option<u64>,
     pub jitter_ms: Option<u64>,
+    pub burstiness: Option<f64>,
     pub chunk_by: Option<ChunkByConfig>,
 }
 
@@ -388,6 +389,9 @@ impl Fixtures {
             }
             if let Some(j) = fs.jitter_ms {
                 spec.jitter_ms = j;
+            }
+            if let Some(burst) = fs.burstiness {
+                spec.burstiness = burst;
             }
             if let Some(cb) = &fs.chunk_by {
                 // Validated at load; fall back to the default on the off chance.

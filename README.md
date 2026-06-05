@@ -71,23 +71,27 @@ native SSE stream. A rule can shape the timing and granularity:
     respond:
       content: "It's sunny and 22°C with a light breeze."
       stream:
-        ttft_ms: 50          # delay before the first token
-        inter_token_ms: 10   # delay between tokens
-        jitter_ms: 8         # random +/- variation per gap, so it isn't robotic
+        ttft_ms: 600         # delay before the first token
+        inter_token_ms: 20   # average delay between tokens
+        burstiness: 0.7      # 0..1: clump tokens into bursts like a real model
         chunk_by: word       # word | char | <positive integer> (chars/chunk)
 ```
 
-`jitter_ms` adds uniform `±jitter` random variation to each inter-token delay so
-a synthesized stream paces unevenly like a real one (disabled under
-`--deterministic` for reproducible runs).
+Real streams don't pace evenly — most tokens arrive in bursts with occasional
+pauses. `burstiness` models that: with probability `burstiness` a gap is zero,
+otherwise it's an exponential pause, sized so the **average gap stays
+`inter_token_ms`** (so total duration is predictable) while the cadence clumps.
+At `0` it falls back to even pacing with `jitter_ms` of uniform variation.
+Burstiness/jitter are disabled under `--deterministic` for reproducible runs.
 
 **Streaming has realistic defaults** so it feels like a real model out of the
-box, derived from measurements of real APIs (time-to-first-token dominates the
-latency): `ttft_ms 700`, `inter_token_ms 20`, `jitter_ms 20`, `chunk_by word`.
-Override per-rule, or fleet-wide via `--default-ttft-ms`,
-`--default-inter-token-ms`, `--default-jitter-ms`, `--default-chunk-by` — e.g.
-set them all to `0` for instant streaming in a fast test suite. (Recorded
-cassettes ignore these and replay their own real timing; see `--replay-speed`.)
+box, derived from measurements of real APIs (time-to-first-token dominates, and
+per-token gaps are bursty): `ttft_ms 700`, `inter_token_ms 20`, `burstiness 0.7`,
+`chunk_by word`. Override per-rule, or fleet-wide via `--default-ttft-ms`,
+`--default-inter-token-ms`, `--default-burstiness`, `--default-jitter-ms`,
+`--default-chunk-by` — e.g. set the delays to `0` for instant streaming in a fast
+test suite. (Recorded cassettes ignore these and replay their own real timing;
+see `--replay-speed`.)
 
 ### Error & failure injection
 

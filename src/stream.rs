@@ -70,22 +70,69 @@ pub(crate) fn step_delay(spec: &StreamSpec, index: usize) -> Option<Duration> {
     }
 }
 
-/// A single inter-token delay with `jitter_ms` of uniform +/- variation, so a
-/// synthesized stream's cadence isn't perfectly even. Jitter is disabled in
-/// deterministic mode for reproducible runs.
+/// A single inter-token delay. With `burstiness > 0` the cadence clumps into
+/// bursts (most gaps zero, the rest a longer pause) like a real stream;
+/// otherwise it's the base delay with `jitter_ms` of uniform variation. Both
+/// are disabled in deterministic mode for reproducible runs.
 pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
     let base = spec.inter_token_ms;
-    if spec.jitter_ms == 0 || util::is_deterministic() {
+    if util::is_deterministic() {
         return delay(base);
     }
-    let lo = base.saturating_sub(spec.jitter_ms);
-    let hi = base.saturating_add(spec.jitter_ms);
-    delay(rand::thread_rng().gen_range(lo..=hi))
+    let mut rng = rand::thread_rng();
+    if spec.burstiness > 0.0 {
+        delay(burst_gap(base, spec.burstiness, &mut rng))
+    } else if spec.jitter_ms == 0 {
+        delay(base)
+    } else {
+        let lo = base.saturating_sub(spec.jitter_ms);
+        let hi = base.saturating_add(spec.jitter_ms);
+        delay(rng.gen_range(lo..=hi))
+    }
+}
+
+/// Mean-preserving burst mixture: with probability `b` the gap is 0; otherwise
+/// it's an exponential draw with mean `base / (1 - b)`. The average stays
+/// `base`, but most tokens fire instantly and the rest pause — matching the
+/// measured real shape (median ~0, occasional spikes). Capped at 25x the pause
+/// mean to avoid a pathological multi-second stall.
+fn burst_gap(base: u64, burstiness: f64, rng: &mut impl Rng) -> u64 {
+    let b = burstiness.clamp(0.0, 0.95);
+    if base == 0 || rng.gen::<f64>() < b {
+        return 0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let pause_mean = base as f64 / (1.0 - b);
+    let u: f64 = rng.gen_range(0.0..1.0);
+    let sample = (-pause_mean * (1.0 - u).ln()).min(pause_mean * 25.0);
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    {
+        sample.round() as u64
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn burst_gap_preserves_mean_and_clumps() {
+        let mut rng = rand::thread_rng();
+        let (base, b, n) = (20u64, 0.75, 50_000usize);
+        let samples: Vec<u64> = (0..n).map(|_| burst_gap(base, b, &mut rng)).collect();
+        let zero_frac = samples.iter().filter(|&&x| x == 0).count() as f64 / n as f64;
+        let mean = samples.iter().sum::<u64>() as f64 / n as f64;
+        // Most gaps are zero (median 0), but the average is preserved at `base`.
+        assert!(
+            zero_frac > 0.6,
+            "expected mostly-zero gaps, got {zero_frac}"
+        );
+        assert!(
+            (mean - base as f64).abs() < 4.0,
+            "mean should ~= base, got {mean}"
+        );
+    }
 
     #[test]
     fn word_pieces_roundtrip() {

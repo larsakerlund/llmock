@@ -103,11 +103,15 @@ impl ChunkBy {
 pub(crate) struct StreamSpec {
     /// Delay before the first content delta (time-to-first-token), in ms.
     pub ttft_ms: u64,
-    /// Delay between subsequent content deltas, in ms.
+    /// Delay between subsequent content deltas, in ms (the average pace).
     pub inter_token_ms: u64,
-    /// Random +/- variation applied to each inter-token delay, in ms, so the
-    /// cadence looks real rather than perfectly even.
+    /// Random +/- variation applied to each inter-token delay when `burstiness`
+    /// is 0, in ms, so an even cadence isn't perfectly robotic.
     pub jitter_ms: u64,
+    /// 0..1 clumping factor. 0 = even pacing (uses `jitter_ms`). Higher emits
+    /// most tokens instantly and the rest after a longer pause — a real stream's
+    /// bursty rhythm — while keeping the average gap at `inter_token_ms`.
+    pub burstiness: f64,
     pub chunk_by: ChunkBy,
 }
 
@@ -117,6 +121,7 @@ impl Default for StreamSpec {
             ttft_ms: 0,
             inter_token_ms: 0,
             jitter_ms: 0,
+            burstiness: 0.0,
             chunk_by: ChunkBy::Word,
         }
     }
