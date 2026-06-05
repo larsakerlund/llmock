@@ -105,6 +105,9 @@ faithful. Run all suites end-to-end:
 ./e2e/sdk_compat/run.sh
 ```
 
+The runner needs only `uv`; it provisions Python and the provider SDKs from the
+pinned `e2e/sdk_compat/uv.lock`.
+
 Add SDK-compat coverage for **every** new adapter and capability (text,
 streaming, tool calls, usage, error injection). Never land an adapter without
 its real-SDK e2e test.

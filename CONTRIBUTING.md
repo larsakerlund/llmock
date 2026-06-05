@@ -60,6 +60,11 @@ Run the suites end to end:
 ./e2e/sdk_compat/run.sh
 ```
 
+The only prerequisite is [uv](https://docs.astral.sh/uv/): it provisions the
+Python interpreter and the provider SDKs from the pinned
+`e2e/sdk_compat/uv.lock`, so the suite needs no preinstalled Python or manual
+venv. The first run downloads the SDKs from PyPI and caches them.
+
 Add SDK-compat coverage for every new adapter and capability (text, streaming,
 tool calls, usage, and error injection). Never land an adapter without its
 real-SDK end-to-end test.

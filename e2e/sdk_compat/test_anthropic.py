@@ -6,7 +6,7 @@ content_block lifecycle, split usage, distinct error envelope) faithfully.
 
 Run llmock first, then:
     LLMOCK_ANTHROPIC_BASE_URL=http://127.0.0.1:8085/anthropic \
-        e2e/sdk_compat/.venv/bin/python e2e/sdk_compat/test_anthropic.py
+        uv run --project e2e/sdk_compat e2e/sdk_compat/test_anthropic.py
 """
 
 import json

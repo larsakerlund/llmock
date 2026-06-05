@@ -1,0 +1,16 @@
+# Dependency set for the real-SDK e2e suite. Not a published package; uv treats
+# it as a virtual project (env + locked deps only). Pins live here; exact
+# resolved versions, including transitive deps, are in uv.lock.
+[project]
+name = "llmock-sdk-compat"
+version = "0.0.0"
+description = "Real-SDK end-to-end checks for llmock. Not published."
+requires-python = ">=3.9"
+dependencies = [
+    "openai==1.99.1",
+    "anthropic==0.62.0",
+    "google-genai==1.29.0",
+]
+
+[tool.uv]
+package = false

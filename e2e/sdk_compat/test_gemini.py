@@ -6,7 +6,7 @@ error envelope. If the real SDK parses our bytes, the protocol is faithful.
 
 Run llmock first, then:
     LLMOCK_GEMINI_BASE_URL=http://127.0.0.1:8086/gemini \
-        e2e/sdk_compat/.venv/bin/python e2e/sdk_compat/test_gemini.py
+        uv run --project e2e/sdk_compat e2e/sdk_compat/test_gemini.py
 """
 
 import os

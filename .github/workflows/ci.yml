@@ -80,8 +80,11 @@ jobs:
         with:
           toolchain: ${{ steps.tc.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      # uv provisions Python and the SDKs from e2e/sdk_compat/uv.lock; cache is
+      # keyed on that lockfile.
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: e2e/sdk_compat/uv.lock
       - name: run SDK-compat suites
         run: ./e2e/sdk_compat/run.sh
