@@ -63,3 +63,91 @@ pub(crate) async fn resolve(
         None => Resolution::NoMatch,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::{Message, StreamDefaults};
+    use crate::fixtures::Fixtures;
+
+    fn req(model: &str, user: &str) -> NeutralRequest {
+        NeutralRequest {
+            model: model.to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: user.to_string(),
+            }],
+            stream: false,
+            include_usage: false,
+        }
+    }
+
+    /// Resolve against a fixture-only state (no cassettes, no record), so no
+    /// network is involved. Exercises step 3 of the resolution path.
+    async fn resolve_fixture_only(fixtures: Fixtures, req: &NeutralRequest) -> Resolution {
+        let state = AppState::new(fixtures, StreamDefaults::instant());
+        resolve(
+            &state,
+            Endpoint::OpenAiChat,
+            req,
+            &Method::POST,
+            "/v1/chat/completions",
+            "",
+            &Bytes::new(),
+            &HeaderMap::new(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn fixture_respond_synthesizes() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: {}
+    respond:
+      content: "hi from fixture"
+"#,
+        )
+        .expect("valid fixtures");
+        match resolve_fixture_only(fixtures, &req("gpt-4o", "anything")).await {
+            Resolution::Synthesize(r) => assert_eq!(r.content, "hi from fixture"),
+            _ => panic!("expected Synthesize"),
+        }
+    }
+
+    #[tokio::test]
+    async fn fixture_error_resolves_to_error() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: {}
+    error:
+      status: 503
+      message: "down"
+"#,
+        )
+        .expect("valid fixtures");
+        match resolve_fixture_only(fixtures, &req("gpt-4o", "x")).await {
+            Resolution::Error(e) => assert_eq!(e.status, 503),
+            _ => panic!("expected Error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn no_matching_rule_is_no_match() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { user_contains: "weather" }
+    respond:
+      content: "matched"
+"#,
+        )
+        .expect("valid fixtures");
+        match resolve_fixture_only(fixtures, &req("gpt-4o", "unrelated")).await {
+            Resolution::NoMatch => {}
+            _ => panic!("expected NoMatch"),
+        }
+    }
+}

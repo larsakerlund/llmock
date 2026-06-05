@@ -427,3 +427,189 @@ impl Fixtures {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::Message;
+
+    /// Build a one-turn user request with the given model and message text.
+    fn req(model: &str, user: &str) -> NeutralRequest {
+        NeutralRequest {
+            model: model.to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: user.to_string(),
+            }],
+            stream: false,
+            include_usage: false,
+        }
+    }
+
+    /// The content of a `Respond` outcome (panics otherwise).
+    fn respond_content(outcome: Option<Outcome>) -> String {
+        match outcome {
+            Some(Outcome::Respond(r)) => r.content,
+            other => panic!("expected a respond outcome, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn first_matching_rule_wins() {
+        // Two rules whose `user_contains` both match "hello world"; the first
+        // listed must win regardless of specificity.
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { user_contains: "hello" }
+    respond:
+      content: "from first"
+  - match: { user_contains: "world" }
+    respond:
+      content: "from second"
+"#,
+        )
+        .expect("valid fixtures");
+        let out = fixtures.outcome_for(&req("gpt-4o", "hello world"), &StreamDefaults::instant());
+        assert_eq!(respond_content(out), "from first");
+    }
+
+    #[test]
+    fn user_contains_is_a_substring_match() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { user_contains: "weather" }
+    respond:
+      content: "matched"
+  - match: {}
+    respond:
+      content: "fallback"
+"#,
+        )
+        .expect("valid fixtures");
+        let defaults = StreamDefaults::instant();
+
+        // Needle embedded anywhere in the message matches.
+        let cases = [
+            ("what is the weather today?", "matched"),
+            ("WEATHERMAN", "fallback"), // case-sensitive: no match, falls through
+            ("forecast please", "fallback"),
+        ];
+        for (msg, want) in cases {
+            let out = fixtures.outcome_for(&req("gpt-4o", msg), &defaults);
+            assert_eq!(respond_content(out), want, "message {msg:?}");
+        }
+    }
+
+    #[test]
+    fn no_match_returns_none_when_no_fallback_rule() {
+        // No empty-match fallback, so an unmatched request resolves to None and
+        // the caller falls back to its own default/builtin handling.
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { user_contains: "weather" }
+    respond:
+      content: "matched"
+"#,
+        )
+        .expect("valid fixtures");
+        let out = fixtures.outcome_for(&req("gpt-4o", "unrelated"), &StreamDefaults::instant());
+        assert!(out.is_none(), "expected no match, got {out:?}");
+    }
+
+    #[test]
+    fn builtin_default_matches_anything() {
+        let fixtures = Fixtures::builtin_default();
+        let defaults = StreamDefaults::instant();
+        for (model, msg) in [("gpt-4o", "anything"), ("claude-opus-4-8", "")] {
+            let out = fixtures.outcome_for(&req(model, msg), &defaults);
+            assert_eq!(respond_content(out), "This is a mock response from llmock.");
+        }
+    }
+
+    #[test]
+    fn model_condition_must_match_exactly() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { model: "gpt-4o" }
+    respond:
+      content: "only gpt-4o"
+  - match: {}
+    respond:
+      content: "fallback"
+"#,
+        )
+        .expect("valid fixtures");
+        let defaults = StreamDefaults::instant();
+
+        // Exact model name hits the first rule.
+        let out = fixtures.outcome_for(&req("gpt-4o", "hi"), &defaults);
+        assert_eq!(respond_content(out), "only gpt-4o");
+
+        // A different (or prefixed) model name does not — exact match, no prefix.
+        for model in ["gpt-4o-mini", "gpt-4", "claude-opus-4-8"] {
+            let out = fixtures.outcome_for(&req(model, "hi"), &defaults);
+            assert_eq!(respond_content(out), "fallback", "model {model:?}");
+        }
+    }
+
+    #[test]
+    fn model_and_user_contains_are_anded() {
+        // Both conditions present must both hold.
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { model: "gpt-4o", user_contains: "weather" }
+    respond:
+      content: "specific"
+  - match: {}
+    respond:
+      content: "fallback"
+"#,
+        )
+        .expect("valid fixtures");
+        let defaults = StreamDefaults::instant();
+
+        assert_eq!(
+            respond_content(fixtures.outcome_for(&req("gpt-4o", "weather?"), &defaults)),
+            "specific"
+        );
+        // Right model, wrong message.
+        assert_eq!(
+            respond_content(fixtures.outcome_for(&req("gpt-4o", "hi"), &defaults)),
+            "fallback"
+        );
+        // Right message, wrong model.
+        assert_eq!(
+            respond_content(fixtures.outcome_for(&req("gpt-4o-mini", "weather?"), &defaults)),
+            "fallback"
+        );
+    }
+
+    #[test]
+    fn error_rule_resolves_to_an_inject_error() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - match: { user_contains: "boom" }
+    error:
+      status: 429
+      type: rate_limit_error
+      message: "slow down"
+"#,
+        )
+        .expect("valid fixtures");
+        let out = fixtures.outcome_for(&req("gpt-4o", "boom"), &StreamDefaults::instant());
+        match out {
+            Some(Outcome::Error(e)) => {
+                assert_eq!(e.status, 429);
+                assert_eq!(e.error_type, "rate_limit_error");
+                assert_eq!(e.message, "slow down");
+            }
+            other => panic!("expected an error outcome, got {other:?}"),
+        }
+    }
+}

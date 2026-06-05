@@ -1,11 +1,11 @@
 //! Record/replay cassettes, matched by the **same engine as fixtures**.
 //!
 //! A cassette captures one real provider exchange. It is matched on the same
-//! [`Match`](crate::fixtures::Match) a fixture uses — `model` + last user
-//! message — scoped to the endpoint and streaming flag it was recorded for (so
-//! a Chat Completions cassette never answers an Anthropic, or a non-streaming,
-//! request). So there is one matching model for everything: a request resolves
-//! to a replayed cassette or a synthesized fixture by identical rules.
+//! [`Match`] a fixture uses (`model` + last user message), scoped to the
+//! endpoint and streaming flag it was recorded for (so a Chat Completions
+//! cassette never answers an Anthropic, or a non-streaming, request). So there
+//! is one matching model for everything: a request resolves to a replayed
+//! cassette or a synthesized fixture by identical rules.
 //!
 //! Recording proxies a miss to the real upstream, captures the exact bytes (and
 //! the real inter-chunk timing for streams), and saves a cassette whose match
@@ -317,4 +317,131 @@ pub(crate) async fn record(
 
     // Serve the just-captured response back at its real timing.
     response.into_response(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::Message;
+
+    fn req(model: &str, user: &str, stream: bool) -> NeutralRequest {
+        NeutralRequest {
+            model: model.to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: user.to_string(),
+            }],
+            stream,
+            include_usage: false,
+        }
+    }
+
+    fn cassette(endpoint: Endpoint, stream: bool, model: &str, user: &str) -> Cassette {
+        Cassette {
+            endpoint,
+            stream,
+            match_: Match {
+                model: Some(model.to_string()),
+                user_contains: Some(user.to_string()),
+            },
+            response: StoredResponse {
+                status: 200,
+                content_type: "application/json".to_string(),
+                body: Some(r#"{"ok":true}"#.to_string()),
+                frames: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn save_then_load_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather");
+
+        let path = save(dir.path(), &original).expect("save");
+        assert_eq!(
+            path.extension().and_then(std::ffi::OsStr::to_str),
+            Some("json")
+        );
+
+        let store = Cassettes::load(dir.path()).expect("load");
+        assert_eq!(store.len(), 1);
+
+        // It replays for a request that matches its derived `Match`.
+        let stored = store
+            .find(
+                Endpoint::OpenAiChat,
+                &req("gpt-4o", "the weather today", false),
+            )
+            .expect("cassette should match");
+        assert_eq!(stored.status, 200);
+        assert_eq!(stored.body.as_deref(), Some(r#"{"ok":true}"#));
+    }
+
+    #[test]
+    fn load_missing_dir_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+        let store = Cassettes::load(&missing).expect("missing dir loads empty");
+        assert_eq!(store.len(), 0);
+    }
+
+    #[test]
+    fn match_is_scoped_by_endpoint_stream_model_and_message() {
+        let dir = tempfile::tempdir().unwrap();
+        save(
+            dir.path(),
+            &cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather"),
+        )
+        .unwrap();
+        let store = Cassettes::load(dir.path()).expect("load");
+
+        // Exact endpoint + stream + model, message contains the needle: hit.
+        assert!(store
+            .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather now", false))
+            .is_some());
+
+        // Wrong endpoint: miss.
+        assert!(store
+            .find(Endpoint::Anthropic, &req("gpt-4o", "weather", false))
+            .is_none());
+
+        // Wrong streaming mode: miss.
+        assert!(store
+            .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather", true))
+            .is_none());
+
+        // Wrong model: miss.
+        assert!(store
+            .find(Endpoint::OpenAiChat, &req("gpt-4o-mini", "weather", false))
+            .is_none());
+
+        // Message lacks the needle: miss.
+        assert!(store
+            .find(Endpoint::OpenAiChat, &req("gpt-4o", "forecast", false))
+            .is_none());
+    }
+
+    #[test]
+    fn load_orders_most_specific_first() {
+        let dir = tempfile::tempdir().unwrap();
+        // Shorter and longer `user_contains` both match "the weather forecast",
+        // but the longer (more specific) one must be tried first.
+        let mut short = cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather");
+        short.response.body = Some(r#"{"which":"short"}"#.to_string());
+        let mut long = cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather forecast");
+        long.response.body = Some(r#"{"which":"long"}"#.to_string());
+        save(dir.path(), &short).unwrap();
+        save(dir.path(), &long).unwrap();
+
+        let store = Cassettes::load(dir.path()).expect("load");
+        assert_eq!(store.len(), 2);
+        let stored = store
+            .find(
+                Endpoint::OpenAiChat,
+                &req("gpt-4o", "the weather forecast", false),
+            )
+            .expect("a cassette should match");
+        assert_eq!(stored.body.as_deref(), Some(r#"{"which":"long"}"#));
+    }
 }

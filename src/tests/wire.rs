@@ -4,7 +4,7 @@
 //! each adapter emits (with volatile ids/timestamps redacted to `<ID>`/`<TS>`).
 //! Spec correctness is verified separately by the real-SDK e2e suites; these
 //! tests pin the wire format byte-for-byte so a refactor cannot silently change
-//! it. Regenerate the expected strings with `cargo test wire_tests::dump --
+//! it. Regenerate the expected strings with `cargo test tests::wire::dump --
 //! --ignored --nocapture`.
 
 use axum::body::Body;

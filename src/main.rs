@@ -119,6 +119,4 @@ async fn healthz() -> Json<serde_json::Value> {
 }
 
 #[cfg(test)]
-mod cassette_tests;
-#[cfg(test)]
-mod wire_tests;
+mod tests;
