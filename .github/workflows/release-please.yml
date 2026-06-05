@@ -1,0 +1,76 @@
+name: release-please
+
+# Open and maintain a release PR that bumps Cargo.toml/Cargo.lock and writes
+# CHANGELOG.md from the Conventional Commit history. Merging that PR tags the
+# release and publishes the GitHub Release; the docker job below then builds and
+# pushes the versioned image in the same run.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+      major: ${{ steps.release.outputs.major }}
+      minor: ${{ steps.release.outputs.minor }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          # The default GITHUB_TOKEN is enough: the docker job runs as a
+          # dependent job in this same run, so it does not depend on the release
+          # event firing (a release created by GITHUB_TOKEN cannot trigger other
+          # workflows). To also run CI on the release PR, mint a GitHub App token
+          # (actions/create-github-app-token) and pass it here instead:
+          #   token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      # QEMU lets the amd64 runner build the arm64 image too. Released images are
+      # multi-arch; the per-commit edge image (docker-edge.yml) stays amd64 for
+      # fast feedback, since emulated arm64 builds are slow.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # Moving tags for a release: exact version, major.minor, major, latest.
+          tags: |
+            type=raw,value=${{ needs.release-please.outputs.version }}
+            type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
+            type=raw,value=${{ needs.release-please.outputs.major }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # No cache on release builds: a release is a trust anchor, so it builds
+          # clean from source rather than risk pulling a poisoned layer from the
+          # shared gha cache. (The Dockerfile's BuildKit cache mounts are
+          # builder-local and start empty on a fresh runner, so they carry no
+          # state between runs.) The edge workflow keeps the cache for speed.
+          provenance: false
