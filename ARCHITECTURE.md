@@ -47,17 +47,17 @@ message, scoped to endpoint and stream), so there is exactly one matching model
 in the system. That is what lets recorded happy paths and hand-authored error
 cases compose in one run.
 
-## SSE framing is serialized by hand
+## SSE framing bypasses axum's helper
 
-We build each SSE frame ourselves rather than using axum's `Sse`/`Event` helper.
-`src/sse.rs` writes the framing directly (`data: <json>\n\n`, or
-`event: <name>\ndata: <json>\n\n` for named events) and the response streams those
-frames as a raw body (`Body::from_stream`). The reason is faithfulness: matching a
-provider byte-for-byte means controlling the exact bytes on the wire, including
-event names, field order, whitespace, and the terminating frames, which a generic
-helper would decide for us. For the same reason, serde struct field order is the
-on-the-wire order: fields are serialized in the order they appear in the struct,
-kept matching the real API.
+`src/sse.rs` formats the SSE frames directly (`data: <json>\n\n`, or
+`event: <name>\ndata: <json>\n\n` for named events) and the response streams them
+as a raw body (`Body::from_stream`), instead of going through axum's `Sse`/`Event`
+helper. The reason is faithfulness: matching a provider byte-for-byte means
+controlling the exact bytes on the wire, including event names, field order,
+whitespace, and the terminating frames, all of which a generic helper would decide
+for us. For the same reason, serde struct field order is the on-the-wire order:
+fields are serialized in the order they appear in the struct, kept matching the
+real API.
 
 `src/sse.rs` also holds the shared fault execution (truncate, malformed, and
 hang) used by every adapter, so mid-stream failure behaviour is consistent across
