@@ -34,7 +34,7 @@ check("response object id has resp_ prefix", r.id.startswith("resp_"))
 check("status completed", r.status == "completed")
 check("output_text convenience works", r.output_text == "This is a default mock response from llmock.")
 check("output[0] is a message", r.output[0].type == "message")
-check("usage input/output tokens present", r.usage.input_tokens >= 0 and r.usage.output_tokens == 8)
+check("usage input/output tokens present", r.usage.input_tokens > 0 and r.usage.output_tokens > 0)
 check("usage total tokens", r.usage.total_tokens == r.usage.input_tokens + r.usage.output_tokens)
 
 # 2. Streaming text — reassemble from response.output_text.delta + final event

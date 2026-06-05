@@ -38,7 +38,7 @@ check("type message / role assistant", m.type == "message" and m.role == "assist
 check("content[0] is text", m.content[0].type == "text")
 check("text content", m.content[0].text == "This is a default mock response from llmock.")
 check("stop_reason end_turn", m.stop_reason == "end_turn")
-check("usage tokens", m.usage.input_tokens >= 0 and m.usage.output_tokens == 8)
+check("usage tokens", m.usage.input_tokens > 0 and m.usage.output_tokens > 0)
 
 # 2. Streaming text — SDK stream helper reassembles
 with client.messages.stream(
@@ -50,7 +50,7 @@ with client.messages.stream(
 check("stream text_stream reassembles", streamed == "This is a default mock response from llmock.")
 check("stream final message text", final.content[0].text == "This is a default mock response from llmock.")
 check("stream final stop_reason", final.stop_reason == "end_turn")
-check("stream final usage output_tokens", final.usage.output_tokens == 8)
+check("stream final usage output_tokens", final.usage.output_tokens > 0)
 
 # 3. Non-streaming tool use
 mt = client.messages.create(

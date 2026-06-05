@@ -351,23 +351,20 @@ impl Fixtures {
             .map(FixtureToolCall::resolve)
             .collect();
 
-        // Estimate token counts when the fixture doesn't pin them, so usage
-        // looks plausible. A crude word count stands in for tokenization.
+        // Estimate token counts when the fixture doesn't pin them. OpenAI uses
+        // the real tiktoken encoding; other providers use a chars/token estimate.
         let usage = if let Some(u) = respond.usage {
             Usage {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,
             }
         } else {
-            let completion: u32 = word_count(&respond.content)
-                + tool_calls
-                    .iter()
-                    .map(|t| word_count(&t.arguments) + 1)
-                    .sum::<u32>();
-            Usage {
-                prompt_tokens: req.messages.iter().map(|m| word_count(&m.content)).sum(),
-                completion_tokens: completion,
-            }
+            crate::tokenize::estimate_usage(
+                &req.model,
+                &req.messages,
+                &respond.content,
+                &tool_calls,
+            )
         };
 
         // finish_reason defaults to `tool_calls` when tool calls are present,
@@ -409,8 +406,4 @@ impl Fixtures {
             fault: respond.fault.as_ref().map(FixtureFault::resolve),
         }))
     }
-}
-
-fn word_count(s: &str) -> u32 {
-    s.split_whitespace().count() as u32
 }

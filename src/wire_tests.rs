@@ -70,7 +70,7 @@ async fn openai_chat_non_stream_text() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         out,
-        r#"{"id":"chatcmpl-<ID>","object":"chat.completion","created":<TS>,"model":"gpt-4o","system_fingerprint":"fp_<ID>","choices":[{"index":0,"message":{"role":"assistant","content":"Hello there, friend.","refusal":null},"logprobs":null,"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":3,"total_tokens":4}}"#
+        r#"{"id":"chatcmpl-<ID>","object":"chat.completion","created":<TS>,"model":"gpt-4o","system_fingerprint":"fp_<ID>","choices":[{"index":0,"message":{"role":"assistant","content":"Hello there, friend.","refusal":null},"logprobs":null,"finish_reason":"stop"}],"usage":{"prompt_tokens":8,"completion_tokens":5,"total_tokens":13}}"#
     );
 }
 
@@ -121,7 +121,7 @@ async fn anthropic_non_stream_text() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         out,
-        r#"{"model":"claude-opus-4-8","id":"msg_<ID>","type":"message","role":"assistant","content":[{"type":"text","text":"Hello there, friend."}],"stop_reason":"end_turn","stop_sequence":null,"stop_details":null,"usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"not_available"}}"#
+        r#"{"model":"claude-opus-4-8","id":"msg_<ID>","type":"message","role":"assistant","content":[{"type":"text","text":"Hello there, friend."}],"stop_reason":"end_turn","stop_sequence":null,"stop_details":null,"usage":{"input_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":5,"service_tier":"standard","inference_geo":"not_available"}}"#
     );
 }
 
@@ -134,14 +134,14 @@ async fn anthropic_stream_text() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let expected = concat!(
-        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-4-8\",\"id\":\"msg_<ID>\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":1,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}}\n\n",
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-4-8\",\"id\":\"msg_<ID>\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":7,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}}\n\n",
         "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
         "event: ping\ndata: {\"type\":\"ping\"}\n\n",
         "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello \"}}\n\n",
         "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"there, \"}}\n\n",
         "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"friend.\"}}\n\n",
         "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
-        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":1,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":3}}\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":7,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":5}}\n\n",
         "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
     );
     assert_eq!(out, expected);
@@ -157,7 +157,7 @@ async fn gemini_non_stream_text() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         out,
-        r#"{"candidates":[{"content":{"parts":[{"text":"Hello there, friend."}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":3,"totalTokenCount":4},"modelVersion":"gemini-2.0-flash"}"#
+        r#"{"candidates":[{"content":{"parts":[{"text":"Hello there, friend."}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":5,"totalTokenCount":12},"modelVersion":"gemini-2.0-flash"}"#
     );
 }
 
@@ -173,7 +173,7 @@ async fn gemini_stream_text() {
         "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hello \"}],\"role\":\"model\"},\"index\":0}],\"modelVersion\":\"gemini-2.0-flash\"}\n\n",
         "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"there, \"}],\"role\":\"model\"},\"index\":0}],\"modelVersion\":\"gemini-2.0-flash\"}\n\n",
         "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"friend.\"}],\"role\":\"model\"},\"index\":0}],\"modelVersion\":\"gemini-2.0-flash\"}\n\n",
-        "data: {\"candidates\":[{\"content\":{\"parts\":[],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":1,\"candidatesTokenCount\":3,\"totalTokenCount\":4},\"modelVersion\":\"gemini-2.0-flash\"}\n\n",
+        "data: {\"candidates\":[{\"content\":{\"parts\":[],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":7,\"candidatesTokenCount\":5,\"totalTokenCount\":12},\"modelVersion\":\"gemini-2.0-flash\"}\n\n",
     );
     assert_eq!(out, expected);
 }
@@ -184,7 +184,7 @@ async fn responses_non_stream_text() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         out,
-        r#"{"id":"resp_<ID>","object":"response","created_at":<TS>,"model":"gpt-4o","status":"completed","error":null,"incomplete_details":null,"instructions":null,"metadata":{},"output":[{"id":"msg_<ID>","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello there, friend.","annotations":[]}]}],"parallel_tool_calls":true,"tool_choice":"auto","tools":[],"temperature":null,"top_p":null,"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":4}}"#
+        r#"{"id":"resp_<ID>","object":"response","created_at":<TS>,"model":"gpt-4o","status":"completed","error":null,"incomplete_details":null,"instructions":null,"metadata":{},"output":[{"id":"msg_<ID>","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello there, friend.","annotations":[]}]}],"parallel_tool_calls":true,"tool_choice":"auto","tools":[],"temperature":null,"top_p":null,"usage":{"input_tokens":8,"input_tokens_details":{"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":13}}"#
     );
 }
 
@@ -207,7 +207,7 @@ async fn responses_stream_text() {
         "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":7,\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"text\":\"Hello there, friend.\",\"logprobs\":[]}\n\n",
         "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":8,\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"Hello there, friend.\",\"annotations\":[]}}\n\n",
         "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":9,\"output_index\":0,\"item\":{\"id\":\"msg_<ID>\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello there, friend.\",\"annotations\":[]}]}}\n\n",
-        "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":10,\"response\":{\"id\":\"resp_<ID>\",\"object\":\"response\",\"created_at\":<TS>,\"model\":\"gpt-4o\",\"status\":\"completed\",\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"metadata\":{},\"output\":[{\"id\":\"msg_<ID>\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello there, friend.\",\"annotations\":[]}]}],\"parallel_tool_calls\":true,\"tool_choice\":\"auto\",\"tools\":[],\"temperature\":null,\"top_p\":null,\"usage\":{\"input_tokens\":1,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":3,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":4}}}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":10,\"response\":{\"id\":\"resp_<ID>\",\"object\":\"response\",\"created_at\":<TS>,\"model\":\"gpt-4o\",\"status\":\"completed\",\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"metadata\":{},\"output\":[{\"id\":\"msg_<ID>\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello there, friend.\",\"annotations\":[]}]}],\"parallel_tool_calls\":true,\"tool_choice\":\"auto\",\"tools\":[],\"temperature\":null,\"top_p\":null,\"usage\":{\"input_tokens\":8,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":5,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":13}}}\n\n",
     );
     assert_eq!(out, expected);
 }

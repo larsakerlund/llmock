@@ -12,6 +12,7 @@ mod fixtures;
 mod sse;
 mod state;
 mod stream;
+mod tokenize;
 mod util;
 
 use std::net::SocketAddr;
