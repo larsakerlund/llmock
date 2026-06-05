@@ -3,7 +3,7 @@
 //! Cassettes are matched by the same `Match` as fixtures (model + last user
 //! message), scoped to endpoint + streaming mode.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use axum::body::Body;
@@ -96,6 +96,20 @@ fn record_to(dir: &Path, upstream: &str) -> RecordConfig {
     }
 }
 
+/// The single `.json` cassette written to `dir`.
+fn find_cassette_file(dir: &Path) -> PathBuf {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        .unwrap()
+        .path()
+}
+
+fn load_cassette(path: &Path) -> Cassette {
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
 #[tokio::test]
 async fn replay_matches_like_a_fixture_and_misses_fall_through() {
     let dir = tempfile::tempdir().unwrap();
@@ -166,14 +180,7 @@ async fn record_proxies_saves_with_derived_match_then_replays() {
     assert_eq!(body, "{\"recorded\":true}");
 
     // One cassette saved, with a match derived from the request.
-    let file = std::fs::read_dir(dir.path())
-        .unwrap()
-        .filter_map(Result::ok)
-        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
-        .unwrap()
-        .path();
-    let cassette: Cassette =
-        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let cassette = load_cassette(&find_cassette_file(dir.path()));
     assert_eq!(cassette.match_.model.as_deref(), Some("gpt-4o"));
     assert_eq!(cassette.match_.user_contains.as_deref(), Some("record me"));
 
@@ -207,14 +214,7 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     assert!(ct.contains("text/event-stream"));
     assert_eq!(body, chunks.concat());
 
-    let file = std::fs::read_dir(dir.path())
-        .unwrap()
-        .filter_map(Result::ok)
-        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
-        .unwrap()
-        .path();
-    let cassette: Cassette =
-        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let cassette = load_cassette(&find_cassette_file(dir.path()));
     assert!(
         cassette.stream,
         "recorded cassette should be marked streaming"

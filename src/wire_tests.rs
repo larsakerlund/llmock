@@ -40,9 +40,13 @@ fn app() -> Router {
 
 /// Replace random ids and timestamps with stable placeholders.
 fn redact(s: &str) -> String {
-    let ids = Regex::new(r"(chatcmpl-|fp_|call_|resp_|msg_|fc_|toolu_)[A-Za-z0-9]+").unwrap();
+    static IDS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static TS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let ids = IDS.get_or_init(|| {
+        Regex::new(r"(chatcmpl-|fp_|call_|resp_|msg_|fc_|toolu_)[A-Za-z0-9]+").unwrap()
+    });
     let s = ids.replace_all(s, "${1}<ID>");
-    let ts = Regex::new(r#""(created|created_at)":\d+"#).unwrap();
+    let ts = TS.get_or_init(|| Regex::new(r#""(created|created_at)":\d+"#).unwrap());
     ts.replace_all(&s, r#""$1":<TS>"#).into_owned()
 }
 
