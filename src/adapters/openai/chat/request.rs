@@ -2,6 +2,7 @@
 
 use serde::Deserialize;
 
+use crate::adapters::content::Content;
 use crate::core::{Message, NeutralRequest};
 
 #[derive(Debug, Deserialize)]
@@ -28,37 +29,6 @@ pub(crate) struct ChatMessage {
 pub(crate) struct StreamOptions {
     #[serde(default)]
     pub include_usage: bool,
-}
-
-/// `content` is either a bare string or an array of `{type, text}` parts.
-#[derive(Debug, Deserialize, Default)]
-#[serde(untagged)]
-pub(crate) enum Content {
-    #[default]
-    Null,
-    Text(String),
-    Parts(Vec<ContentPart>),
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ContentPart {
-    #[serde(default)]
-    pub text: String,
-}
-
-impl Content {
-    /// Collapse string or content-parts into plain text.
-    pub(crate) fn flatten(&self) -> String {
-        match self {
-            Content::Null => String::new(),
-            Content::Text(s) => s.clone(),
-            Content::Parts(parts) => parts
-                .iter()
-                .map(|p| p.text.as_str())
-                .collect::<Vec<_>>()
-                .join(""),
-        }
-    }
 }
 
 impl ChatCompletionRequest {

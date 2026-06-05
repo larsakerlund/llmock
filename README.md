@@ -261,8 +261,7 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 ```
 
 - `src/core/`                    — provider-neutral request/response model
-- `src/adapters/openai/`         — OpenAI Chat Completions + Models
-- `src/adapters/openai_responses/` — OpenAI Responses API
+- `src/adapters/openai/`         — OpenAI: `chat/`, `responses/`, Models
 - `src/adapters/anthropic/`      — Anthropic Messages API
 - `src/adapters/gemini/`         — Google Gemini API
 - `src/fixtures.rs`              — matching rules

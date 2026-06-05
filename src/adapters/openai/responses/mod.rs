@@ -14,7 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
 
-use crate::adapters::openai::error::ApiError;
+use super::error::ApiError;
 use crate::cassette::Endpoint;
 use crate::engine::{resolve, Resolution};
 use crate::state::AppState;

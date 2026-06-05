@@ -10,9 +10,11 @@ Three layers over a provider-neutral core, so adding a provider is a new adapter
 
 - `src/core/` — provider-neutral request/response model (`NeutralRequest`,
   `NeutralResponse`, `ToolCall`, `Usage`, `Fault`, `InjectError`, `Outcome`).
-- `src/adapters/<provider>/` — one module per wire format: request parse +
-  response/stream serialize (incl. exact SSE framing) + error envelope.
-  Current: `openai` (Chat Completions + Models), `openai_responses`, `anthropic`.
+- `src/adapters/<vendor>/` — one module per vendor: request parse +
+  response/stream serialize (incl. exact SSE framing) + error envelope. A vendor
+  with several wire formats keeps each as a submodule. Current: `openai`
+  (`chat`, `responses`, plus Models, sharing one `error.rs`), `anthropic`,
+  `gemini`.
 - `src/fixtures.rs` — match a request to a canned `Outcome`.
 - `src/stream.rs` — text chunking + streaming timing.
 - `src/sse.rs` — shared SSE byte framing + fault execution (used by all adapters).

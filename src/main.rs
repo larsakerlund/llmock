@@ -106,20 +106,14 @@ async fn main() {
 /// setups, e.g. base URL `http://host/openai`). Shared by `main` and the
 /// in-process tests.
 fn build_app(state: AppState) -> Router {
-    // OpenAI spans two adapters (Chat Completions + Models, and Responses).
-    let openai = || {
-        Router::new()
-            .merge(adapters::openai::router())
-            .merge(adapters::openai_responses::router())
-    };
     Router::new()
         .route("/healthz", get(healthz))
         // Root mounts.
-        .merge(openai())
+        .merge(adapters::openai::router())
         .merge(adapters::anthropic::router())
         .merge(adapters::gemini::router())
         // Provider-prefixed aliases.
-        .nest("/openai", openai())
+        .nest("/openai", adapters::openai::router())
         .nest("/anthropic", adapters::anthropic::router())
         .nest("/gemini", adapters::gemini::router())
         .with_state(state)

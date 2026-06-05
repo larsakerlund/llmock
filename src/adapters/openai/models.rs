@@ -5,10 +5,18 @@
 //! without first registering them.
 
 use axum::extract::Path;
-use axum::Json;
+use axum::routing::get;
+use axum::{Json, Router};
 use serde::Serialize;
 
+use crate::state::AppState;
 use crate::util;
+
+pub(crate) fn router() -> Router<AppState> {
+    Router::new()
+        .route("/v1/models", get(list_models))
+        .route("/v1/models/{model}", get(get_model))
+}
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Model {
@@ -36,13 +44,13 @@ fn model(id: impl Into<String>) -> Model {
 /// A small default catalogue so `GET /v1/models` returns something useful.
 const DEFAULT_MODELS: &[&str] = &["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"];
 
-pub(crate) async fn list_models() -> Json<ModelList> {
+async fn list_models() -> Json<ModelList> {
     Json(ModelList {
         object: "list",
         data: DEFAULT_MODELS.iter().map(|id| model(*id)).collect(),
     })
 }
 
-pub(crate) async fn get_model(Path(model_id): Path<String>) -> Json<Model> {
+async fn get_model(Path(model_id): Path<String>) -> Json<Model> {
     Json(model(model_id))
 }

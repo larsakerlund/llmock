@@ -6,7 +6,7 @@
 
 use serde::Deserialize;
 
-use crate::adapters::openai::request::Content;
+use crate::adapters::content::Content;
 use crate::core::{Message, NeutralRequest};
 
 #[derive(Debug, Deserialize)]
