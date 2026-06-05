@@ -1,0 +1,16 @@
+# Drop llmock into a dev stack as the stand-in for a real LLM provider. Point
+# your app's SDK base URL at http://llmock:8080/<provider> (or
+# http://localhost:8080/<provider> from the host).
+services:
+  llmock:
+    image: ghcr.io/larsakerlund/llmock:latest
+    ports:
+      - "8080:8080"
+    # Mount your own fixtures (developer-owned) and select them. Drop both lines
+    # to serve the built-in fallback response with no configuration.
+    volumes:
+      - ./fixtures:/fixtures:ro
+    command: ["--fixtures", "/fixtures/example.yaml"]
+    # Every flag is also an env var; uncomment for byte-stable responses.
+    # environment:
+    #   LLMOCK_DETERMINISTIC: "true"

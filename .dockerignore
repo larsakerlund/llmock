@@ -1,0 +1,18 @@
+# Keep the build context to what `cargo build` needs. Everything else (the git
+# history, CI, docs, the e2e suite, local secrets) only bloats the context and
+# busts the build cache.
+target/
+.git/
+.github/
+.claude/
+e2e/
+fixtures/
+*.md
+.env
+.env.*
+*.env
+.gitignore
+deny.toml
+docker-compose.yml
+Dockerfile
+.dockerignore
