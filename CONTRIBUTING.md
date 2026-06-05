@@ -100,9 +100,11 @@ Linux-kernel-style body.
 **Subject:** `<type>: <summary>`
 
 - Allowed types (no scopes): `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
-  `build`, `ci`, `chore`.
+  `deps`, `build`, `ci`, `chore`. Use `deps` for the app's runtime dependencies
+  and `build` for dev-dependencies and other build or tooling changes.
 - Summary in imperative mood ("add", not "added"/"adds"), lowercase, no trailing
-  period, at most 72 characters.
+  period, at most 72 characters. It becomes the changelog line for `feat`, `fix`,
+  `perf`, and `deps` commits, so write it for a reader who never saw the diff.
 
 **Body** (after a blank line): wrap at 72 columns; explain what and why, not how;
 imperative mood; reference behaviour or spec, not implementation trivia. Don't
@@ -123,6 +125,22 @@ lifecycle (message_start … message_stop) with text_delta / input_json_delta
 deltas; errors use the Anthropic {"type":"error",...} envelope so the SDK
 raises typed exceptions.
 ```
+
+## Releases
+
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please). It reads the
+Conventional Commit history on `main` and keeps an open release PR that bumps the
+version in `Cargo.toml` and `Cargo.lock` and updates `CHANGELOG.md`. The bump
+follows the commit types: a `feat` bumps the minor, a `fix` bumps the patch, and
+a `BREAKING CHANGE` bumps the minor while the project is pre-1.0 (so the major
+stays `0` until we declare stability). The changelog shows `feat`, `fix`, `perf`,
+and `deps`; the rest are hidden. `perf` and `deps` are recorded but don't cut a
+release on their own, so they ride the next `feat`/`fix` release. Merging the
+release PR tags the release, publishes the GitHub Release, and pushes the
+versioned image to `ghcr.io/larsakerlund/llmock`. Don't edit `CHANGELOG.md` or
+the version by hand; write good commit messages and merge the release PR when you
+want to cut a release.
 
 ## Workflow
 

@@ -37,9 +37,15 @@ Every commit follows **Conventional Commits** with a **Linux-kernel-style body**
 
 Subject: `<type>: <summary>`
 - Allowed `<type>` prefixes (no scopes): `feat`, `fix`, `docs`, `test`,
-  `refactor`, `perf`, `build`, `ci`, `chore`.
+  `refactor`, `perf`, `deps`, `build`, `ci`, `chore`.
+- `deps` is for the app's runtime dependencies; `build` is for dev-dependencies
+  and other build or tooling changes. release-please generates `CHANGELOG.md`, so
+  the type is load-bearing: `feat`, `fix`, `perf`, and `deps` are shown in the
+  changelog and the rest are hidden, and the type drives the version bump
+  (`feat` → minor, `fix` → patch, `BREAKING CHANGE` → minor while < 1.0.0).
 - Summary: imperative mood ("add", not "added"/"adds"), lowercase, no trailing
-  period, ≤ 72 chars.
+  period, ≤ 72 chars. The summary becomes the changelog line, so write it for a
+  reader who never saw the diff.
 
 Body (after a blank line):
 - Wrap at 72 columns. Explain **what** and **why**, not how. Imperative mood.

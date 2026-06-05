@@ -3,6 +3,7 @@
 [![CI](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml/badge.svg)](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.96+-orange.svg)](rust-toolchain.toml)
+[![Container](https://img.shields.io/badge/ghcr.io-larsakerlund%2Fllmock-2496ed?logo=docker&logoColor=white)](https://github.com/larsakerlund/llmock/pkgs/container/llmock)
 
 A fast, byte-faithful emulator of LLM provider HTTP APIs, for testing your app
 without access to a real LLM. Point your SDK's `base_url` at llmock and it serves
@@ -37,10 +38,45 @@ you control.
   streaming timing included.
 - A `--deterministic` mode for reproducible test runs.
 
-## Installation
+## Run it
 
-llmock is a single Rust binary. Build it from source (Rust 1.96+, pinned in
-[`rust-toolchain.toml`](rust-toolchain.toml)):
+The fastest path to a running mock is the published container. It listens on
+`0.0.0.0:8080` and serves the built-in fallback response with no configuration:
+
+```sh
+docker run --rm -p 8080:8080 ghcr.io/larsakerlund/llmock:latest
+```
+
+To serve your own fixtures, mount a file and point `--fixtures` at it (fixtures
+are developer-owned; see [Fixtures](#fixtures)):
+
+```sh
+docker run --rm -p 8080:8080 \
+  -v "$PWD/fixtures:/fixtures:ro" \
+  ghcr.io/larsakerlund/llmock:latest --fixtures /fixtures/example.yaml
+```
+
+Every flag is also an environment variable (`LLMOCK_PORT`, `LLMOCK_FIXTURES`,
+`LLMOCK_DETERMINISTIC`, ...), so it drops into a compose stack alongside your
+app. A ready-to-edit [`docker-compose.yml`](docker-compose.yml) is included:
+
+```yaml
+services:
+  llmock:
+    image: ghcr.io/larsakerlund/llmock:latest
+    ports: ["8080:8080"]
+    volumes: ["./fixtures:/fixtures:ro"]
+    command: ["--fixtures", "/fixtures/example.yaml"]
+```
+
+Tags: `latest` is the newest release, `0.1` / `0` track the latest minor/major,
+and `edge` follows `main`. The image binds `0.0.0.0` (the bare binary defaults
+to `127.0.0.1`) and ships a `/healthz` HEALTHCHECK.
+
+### Build from source
+
+llmock is a single Rust binary. Build it with Rust 1.96+, pinned in
+[`rust-toolchain.toml`](rust-toolchain.toml):
 
 ```sh
 git clone https://github.com/larsakerlund/llmock
@@ -52,6 +88,8 @@ cargo build --release
 Or run it directly during development with `cargo run --`.
 
 ## Quick start
+
+Start the server (either `docker run ...` from above, or from source):
 
 ```sh
 cargo run -- --port 8080 --fixtures fixtures/example.yaml
