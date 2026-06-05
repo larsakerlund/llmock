@@ -3,6 +3,9 @@
 *.pdb
 .DS_Store
 
+# Local Claude Code scratch (git worktrees, session state) — never committed.
+.claude/
+
 # Secrets — provider API keys for record mode. Never commit.
 .env
 .env.*
