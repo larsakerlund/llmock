@@ -4,7 +4,7 @@
 //! `type` in its JSON data):
 //!   message_start
 //!   (per content block:)
-//!     content_block_start → [ping] → content_block_delta ×N → content_block_stop
+//!     content_block_start → (ping) → content_block_delta ×N → content_block_stop
 //!   message_delta (stop_reason + cumulative output usage)
 //!   message_stop
 //!
