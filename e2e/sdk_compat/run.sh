@@ -8,12 +8,13 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 PORT="${PORT:-8088}"
-VENV="tests/sdk_compat/.venv"
+VENV="e2e/sdk_compat/.venv"
 
 if [ ! -x "$VENV/bin/python" ]; then
   echo "Creating venv and installing provider SDKs..."
   python3 -m venv "$VENV"
-  "$VENV/bin/pip" -q install --upgrade pip openai anthropic google-genai
+  "$VENV/bin/pip" -q install --upgrade pip \
+    "openai==1.99.1" "anthropic==0.62.0" "google-genai==1.29.0"
 fi
 
 echo "Building llmock..."
@@ -28,27 +29,36 @@ echo "Starting llmock on port $PORT..."
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
-# Wait for readiness.
+# Wait for readiness, then fail fast if the server never comes up.
+ready=0
 for _ in $(seq 1 50); do
-  if curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then break; fi
+  if curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 0.2
 done
+if [ "$ready" -ne 1 ]; then
+  echo "Error: llmock did not become healthy on port $PORT. Server log:" >&2
+  cat /tmp/llmock-e2e.log >&2 || true
+  exit 1
+fi
 
 export LLMOCK_BASE_URL="http://127.0.0.1:$PORT/openai/v1"
 export LLMOCK_ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT/anthropic"
 export LLMOCK_GEMINI_BASE_URL="http://127.0.0.1:$PORT/gemini"
 echo
 echo "== OpenAI Chat Completions API =="
-"$VENV/bin/python" tests/sdk_compat/test_openai.py
+"$VENV/bin/python" e2e/sdk_compat/test_openai.py
 echo
 echo "== OpenAI Responses API =="
-"$VENV/bin/python" tests/sdk_compat/test_openai_responses.py
+"$VENV/bin/python" e2e/sdk_compat/test_openai_responses.py
 echo
 echo "== Anthropic Messages API =="
-"$VENV/bin/python" tests/sdk_compat/test_anthropic.py
+"$VENV/bin/python" e2e/sdk_compat/test_anthropic.py
 echo
 echo "== Google Gemini API =="
-"$VENV/bin/python" tests/sdk_compat/test_gemini.py
+"$VENV/bin/python" e2e/sdk_compat/test_gemini.py
 
 echo
 echo "All SDK-compat suites passed."

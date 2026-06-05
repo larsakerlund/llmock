@@ -7,7 +7,7 @@ expected objects, our wire format is faithful. Run llmock first, e.g.:
 
 then:
 
-    tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_openai.py
+    e2e/sdk_compat/.venv/bin/python e2e/sdk_compat/test_openai.py
 """
 
 import os

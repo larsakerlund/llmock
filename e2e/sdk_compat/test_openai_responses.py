@@ -6,7 +6,7 @@ the expected values, our wire format is faithful to spec.
 
 Run llmock first, then:
     LLMOCK_BASE_URL=http://127.0.0.1:8084/openai/v1 \
-        tests/sdk_compat/.venv/bin/python tests/sdk_compat/test_openai_responses.py
+        e2e/sdk_compat/.venv/bin/python e2e/sdk_compat/test_openai_responses.py
 """
 
 import json

@@ -12,6 +12,6 @@
 *.env
 
 # Python e2e/SDK-compat helpers
-tests/sdk_compat/.venv
+e2e/sdk_compat/.venv
 __pycache__/
 *.pyc

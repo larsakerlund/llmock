@@ -111,6 +111,6 @@ request into a `NeutralRequest` and serializes an `Outcome` back into the vendor
 wire format. The core, fixture engine, stream simulator, and fault injection are
 untouched.
 
-Every adapter must land with real-SDK end-to-end coverage in `tests/sdk_compat/`;
+Every adapter must land with real-SDK end-to-end coverage in `e2e/sdk_compat/`;
 see [CONTRIBUTING.md](CONTRIBUTING.md). Fidelity is verified by driving llmock
 with the genuine provider SDKs, not by asserting on our own output.

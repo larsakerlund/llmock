@@ -294,7 +294,7 @@ Faithfulness is verified by running the genuine provider SDKs against llmock. On
 command builds the server, starts it, and runs the SDK-compat suites:
 
 ```sh
-./tests/sdk_compat/run.sh
+./e2e/sdk_compat/run.sh
 ```
 
 It exercises the real `openai`, `anthropic`, and `google-genai` SDKs against all
