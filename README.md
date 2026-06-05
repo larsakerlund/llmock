@@ -79,10 +79,15 @@ native SSE stream. A rule can shape the timing and granularity:
 
 `jitter_ms` adds uniform `±jitter` random variation to each inter-token delay so
 a synthesized stream paces unevenly like a real one (disabled under
-`--deterministic` for reproducible runs). Server-wide defaults come from
-flags/env: `--default-ttft-ms`, `--default-inter-token-ms`, `--default-jitter-ms`,
-`--default-chunk-by` — handy for applying realistic latency fleet-wide without
-editing fixtures.
+`--deterministic` for reproducible runs).
+
+**Streaming has realistic defaults** so it feels like a real model out of the
+box, derived from measurements of real APIs (time-to-first-token dominates the
+latency): `ttft_ms 700`, `inter_token_ms 20`, `jitter_ms 20`, `chunk_by word`.
+Override per-rule, or fleet-wide via `--default-ttft-ms`,
+`--default-inter-token-ms`, `--default-jitter-ms`, `--default-chunk-by` — e.g.
+set them all to `0` for instant streaming in a fast test suite. (Recorded
+cassettes ignore these and replay their own real timing; see `--replay-speed`.)
 
 ### Error & failure injection
 

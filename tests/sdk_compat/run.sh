@@ -20,7 +20,11 @@ echo "Building llmock..."
 cargo build -q
 
 echo "Starting llmock on port $PORT..."
-./target/debug/llmock --port "$PORT" --fixtures fixtures/example.yaml >/tmp/llmock-e2e.log 2>&1 &
+# Instant streaming here — these suites check wire-format correctness, not the
+# realistic default timing (which is validated separately).
+./target/debug/llmock --port "$PORT" --fixtures fixtures/example.yaml \
+  --default-ttft-ms 0 --default-inter-token-ms 0 --default-jitter-ms 0 \
+  >/tmp/llmock-e2e.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 

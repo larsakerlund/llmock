@@ -25,20 +25,22 @@ pub(crate) struct Config {
     #[arg(long, env = "LLMOCK_FIXTURES")]
     pub fixtures: Option<PathBuf>,
 
-    /// Default time-to-first-token for streaming, in ms. Overridden per-rule by
-    /// a fixture's `stream.ttft_ms`.
-    #[arg(long, env = "LLMOCK_TTFT_MS", default_value_t = 0)]
+    /// Default time-to-first-token for streaming, in ms. The default is a
+    /// realistic value measured from real models (TTFT dominates streaming
+    /// latency); set `0` for instant streaming in fast test suites. Overridden
+    /// per-rule by a fixture's `stream.ttft_ms`.
+    #[arg(long, env = "LLMOCK_TTFT_MS", default_value_t = 700)]
     pub default_ttft_ms: u64,
 
     /// Default delay between streamed deltas, in ms. Overridden per-rule by a
     /// fixture's `stream.inter_token_ms`.
-    #[arg(long, env = "LLMOCK_INTER_TOKEN_MS", default_value_t = 0)]
+    #[arg(long, env = "LLMOCK_INTER_TOKEN_MS", default_value_t = 20)]
     pub default_inter_token_ms: u64,
 
     /// Default random +/- variation on each inter-token delay, in ms, so
     /// synthesized streams don't pace perfectly evenly. Overridden per-rule by
     /// `stream.jitter_ms`.
-    #[arg(long, env = "LLMOCK_JITTER_MS", default_value_t = 0)]
+    #[arg(long, env = "LLMOCK_JITTER_MS", default_value_t = 20)]
     pub default_jitter_ms: u64,
 
     /// Default streaming granularity: `word`, `char`, or a positive integer
