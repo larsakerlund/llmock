@@ -10,26 +10,30 @@ use tokio::time::sleep;
 use crate::core::Fault;
 use crate::stream::delay;
 
+/// Build an SSE frame, optionally prefixed with an `event: <name>` line.
+fn frame(name: Option<&str>, json: &str) -> Bytes {
+    let mut buf = String::with_capacity(name.map_or(0, |n| n.len() + 8) + json.len() + 8);
+    if let Some(name) = name {
+        buf.push_str("event: ");
+        buf.push_str(name);
+        buf.push('\n');
+    }
+    buf.push_str("data: ");
+    buf.push_str(json);
+    buf.push_str("\n\n");
+    Bytes::from(buf)
+}
+
 /// A data-only SSE frame: `data: <json>\n\n` (OpenAI Chat Completions, Gemini).
 pub(crate) fn data<T: Serialize>(value: &T) -> Bytes {
     let json = serde_json::to_string(value).expect("event serializes");
-    let mut buf = String::with_capacity(json.len() + 8);
-    buf.push_str("data: ");
-    buf.push_str(&json);
-    buf.push_str("\n\n");
-    Bytes::from(buf)
+    frame(None, &json)
 }
 
 /// A named SSE frame: `event: <name>\ndata: <json>\n\n` (Anthropic, Responses).
 pub(crate) fn event<T: Serialize>(name: &str, value: &T) -> Bytes {
     let json = serde_json::to_string(value).expect("event serializes");
-    let mut buf = String::with_capacity(name.len() + json.len() + 16);
-    buf.push_str("event: ");
-    buf.push_str(name);
-    buf.push_str("\ndata: ");
-    buf.push_str(&json);
-    buf.push_str("\n\n");
-    Bytes::from(buf)
+    frame(Some(name), &json)
 }
 
 /// How many content deltas to emit before a fault triggers.
