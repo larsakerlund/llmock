@@ -74,11 +74,11 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
 
             let pieces = chunk_text(&resp.content, spec.chunk_by);
             let mut triggered: Option<Fault> = None;
-            for (i, piece) in pieces.iter().enumerate() {
+            for (idx, piece) in pieces.iter().enumerate() {
                 if let Some(f) = fault {
-                    if fault_after(f) == i { triggered = Some(f); break; }
+                    if fault_after(f) == idx { triggered = Some(f); break; }
                 }
-                if let Some(d) = step_delay(&spec, i) {
+                if let Some(d) = step_delay(&spec, idx) {
                     sleep(d).await;
                 }
                 yield Ok(event("content_block_delta", &ContentBlockDelta {
@@ -106,12 +106,12 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
         }
 
         // --- Tool-use blocks ---
-        for (t, tc) in resp.tool_calls.iter().enumerate() {
+        for (tool_idx, tc) in resp.tool_calls.iter().enumerate() {
             yield Ok(event("content_block_start", &ContentBlockStart {
                 event_type: "content_block_start", index,
                 content_block: ContentBlock::ToolUse(ToolUseBlock {
                     block_type: "tool_use",
-                    id: tool_ids[t].clone(),
+                    id: tool_ids[tool_idx].clone(),
                     name: tc.name.clone(),
                     input: Value::Object(serde_json::Map::new()), // empty; filled via deltas
                 }),

@@ -39,25 +39,15 @@ async fn main() {
     let config = Config::parse();
 
     let fixtures = if let Some(path) = &config.fixtures {
-        match Fixtures::load(path) {
-            Ok(f) => {
-                tracing::info!("loaded fixtures from {}", path.display());
-                f
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(1);
-            }
-        }
+        let f = exit_on_error(Fixtures::load(path));
+        tracing::info!("loaded fixtures from {}", path.display());
+        f
     } else {
         tracing::info!("no fixtures file given; using built-in default fixture");
         Fixtures::builtin_default()
     };
 
-    let stream_defaults = config.stream_defaults().unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        std::process::exit(1);
-    });
+    let stream_defaults = exit_on_error(config.stream_defaults());
 
     if config.deterministic {
         util::enable_deterministic();
@@ -71,10 +61,7 @@ async fn main() {
     }
     let mut state = AppState::new(fixtures, stream_defaults);
     if let Some(dir) = &config.cassette_dir {
-        let store = Cassettes::load(dir).unwrap_or_else(|e| {
-            eprintln!("error: {e}");
-            std::process::exit(1);
-        });
+        let store = exit_on_error(Cassettes::load(dir));
         tracing::info!(
             "loaded {} cassette(s) from {}{}",
             store.len(),
@@ -99,6 +86,15 @@ async fn main() {
 
     tracing::info!("llmock listening on http://{addr}");
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// Unwrap a startup `Result`, or print the error to stderr and exit non-zero.
+/// Centralises the `error: {e}` / exit(1) pattern used at the init sites.
+fn exit_on_error<T>(r: Result<T, String>) -> T {
+    r.unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1)
+    })
 }
 
 /// Assemble the full router over the given state. Each provider is mounted both

@@ -163,13 +163,10 @@ pub(crate) fn output_items(resp: &NeutralResponse, ids: &ResponseIds) -> Vec<Out
     items
 }
 
-/// Build the initial (`in_progress`, empty output, no usage) response object
-/// embedded in the `response.created` / `response.in_progress` stream events.
-pub(crate) fn initial_response(
-    resp: &NeutralResponse,
-    ids: &ResponseIds,
-    created_at: u64,
-) -> ResponseObject {
+/// Build the response object fields shared by every status, leaving the
+/// status-specific `status`/`output`/`usage` fields at their initial
+/// (`in_progress`, empty output, no usage) values for callers to override.
+fn base_response(resp: &NeutralResponse, ids: &ResponseIds, created_at: u64) -> ResponseObject {
     ResponseObject {
         id: ids.response_id.clone(),
         object: "response",
@@ -190,6 +187,16 @@ pub(crate) fn initial_response(
     }
 }
 
+/// Build the initial (`in_progress`, empty output, no usage) response object
+/// embedded in the `response.created` / `response.in_progress` stream events.
+pub(crate) fn initial_response(
+    resp: &NeutralResponse,
+    ids: &ResponseIds,
+    created_at: u64,
+) -> ResponseObject {
+    base_response(resp, ids, created_at)
+}
+
 /// Build the full (completed) response object (non-streaming path, and the
 /// object embedded in the streaming `response.completed` event).
 pub(crate) fn completed_response(
@@ -198,21 +205,9 @@ pub(crate) fn completed_response(
     created_at: u64,
 ) -> ResponseObject {
     ResponseObject {
-        id: ids.response_id.clone(),
-        object: "response",
-        created_at,
-        model: resp.model.clone(),
         status: "completed",
-        error: None,
-        incomplete_details: None,
-        instructions: None,
-        metadata: serde_json::Map::new(),
         output: output_items(resp, ids),
-        parallel_tool_calls: true,
-        tool_choice: "auto",
-        tools: Vec::new(),
-        temperature: None,
-        top_p: None,
         usage: Some(usage_for(resp)),
+        ..base_response(resp, ids, created_at)
     }
 }

@@ -86,10 +86,11 @@ impl Config {
     /// Collect the global streaming defaults, validating `default_chunk_by` if
     /// it was set. Unset fields stay `None` (resolved per-model at request time).
     pub(crate) fn stream_defaults(&self) -> Result<crate::core::StreamDefaults, String> {
-        let chunk_by = match &self.default_chunk_by {
-            Some(s) => Some(crate::core::ChunkBy::parse(s)?),
-            None => None,
-        };
+        let chunk_by = self
+            .default_chunk_by
+            .as_ref()
+            .map(|s| crate::core::ChunkBy::parse(s))
+            .transpose()?;
         Ok(crate::core::StreamDefaults {
             ttft_ms: self.default_ttft_ms,
             inter_token_ms: self.default_inter_token_ms,

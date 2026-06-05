@@ -231,8 +231,8 @@ pub(crate) async fn record(
 ) -> Response {
     let base = rec
         .upstream
-        .clone()
-        .unwrap_or_else(|| endpoint.upstream_base().to_string());
+        .as_deref()
+        .unwrap_or_else(|| endpoint.upstream_base());
     let url = if query.is_empty() {
         format!("{base}{path}")
     } else {

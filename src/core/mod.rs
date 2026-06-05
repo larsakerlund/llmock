@@ -23,7 +23,6 @@ pub(crate) struct NeutralRequest {
     /// True when the caller asked for usage on the final stream chunk
     /// (OpenAI `stream_options.include_usage`). Consumed by the streaming
     /// serializers.
-    #[allow(dead_code)]
     pub include_usage: bool,
 }
 

@@ -18,6 +18,7 @@ use super::error::ApiError;
 use crate::cassette::Endpoint;
 use crate::engine::{resolve, Resolution};
 use crate::state::AppState;
+use crate::util;
 use request::ResponsesRequest;
 use response::{completed_response, ResponseIds};
 
@@ -53,7 +54,7 @@ async fn responses(State(state): State<AppState>, req: Request) -> Result<Respon
                 Ok(sse::stream_response(&resp))
             } else {
                 let ids = ResponseIds::for_response(&resp);
-                let object = completed_response(&resp, &ids, crate::util::unix_now());
+                let object = completed_response(&resp, &ids, util::unix_now());
                 Ok(Json(object).into_response())
             }
         }
