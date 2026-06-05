@@ -25,13 +25,9 @@ pub(crate) fn is_deterministic() -> bool {
     DETERMINISTIC.load(Ordering::Relaxed)
 }
 
-fn deterministic() -> bool {
-    is_deterministic()
-}
-
 /// Seconds since the Unix epoch (fixed in deterministic mode).
 pub(crate) fn unix_now() -> u64 {
-    if deterministic() {
+    if is_deterministic() {
         return FIXED_TIME;
     }
     SystemTime::now()
@@ -42,7 +38,7 @@ pub(crate) fn unix_now() -> u64 {
 /// A suffix of `len` characters: random normally, or a zero-padded monotonic
 /// counter (so every id is unique and stable) in deterministic mode.
 fn suffix(len: usize) -> String {
-    if deterministic() {
+    if is_deterministic() {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let digits = format!("{n:0>len$}");
         // Keep exactly `len` chars even if the counter ever overflows the width.
@@ -55,42 +51,48 @@ fn suffix(len: usize) -> String {
         .collect()
 }
 
+/// An id of the form `<prefix><random suffix of `len` chars>`. The prefix
+/// carries its own separator (e.g. `"chatcmpl-"`, `"fp_"`).
+fn id(prefix: &str, len: usize) -> String {
+    format!("{prefix}{}", suffix(len))
+}
+
 /// `chatcmpl-…` id, matching OpenAI's shape.
 pub(crate) fn completion_id() -> String {
-    format!("chatcmpl-{}", suffix(29))
+    id("chatcmpl-", 29)
 }
 
 /// `fp_…` system fingerprint, matching OpenAI's shape.
 pub(crate) fn system_fingerprint() -> String {
-    format!("fp_{}", suffix(10))
+    id("fp_", 10)
 }
 
 /// `call_…` tool-call id, matching OpenAI's shape.
 pub(crate) fn tool_call_id() -> String {
-    format!("call_{}", suffix(24))
+    id("call_", 24)
 }
 
 /// `resp_…` Responses API response id.
 pub(crate) fn response_id() -> String {
-    format!("resp_{}", suffix(24))
+    id("resp_", 24)
 }
 
 /// `msg_…` Responses API output message item id.
 pub(crate) fn message_item_id() -> String {
-    format!("msg_{}", suffix(24))
+    id("msg_", 24)
 }
 
 /// `fc_…` Responses API function-call item id.
 pub(crate) fn function_item_id() -> String {
-    format!("fc_{}", suffix(24))
+    id("fc_", 24)
 }
 
 /// `msg_…` Anthropic Messages id.
 pub(crate) fn anthropic_message_id() -> String {
-    format!("msg_{}", suffix(24))
+    id("msg_", 24)
 }
 
 /// `toolu_…` Anthropic tool-use block id.
 pub(crate) fn tool_use_id() -> String {
-    format!("toolu_{}", suffix(24))
+    id("toolu_", 24)
 }
