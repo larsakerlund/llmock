@@ -22,22 +22,20 @@ fn cl100k() -> &'static CoreBPE {
     E.get_or_init(|| tiktoken_rs::cl100k_base().expect("cl100k_base"))
 }
 
+/// OpenAI model-name prefixes for which tiktoken applies.
+const OPENAI_PREFIXES: &[&str] = &["gpt", "o1", "o3", "o4", "chatgpt"];
+
 /// Whether the model name belongs to the OpenAI family (so tiktoken applies).
+/// Expects an already-lowercased name (see [`estimate_usage`]).
 fn is_openai(model: &str) -> bool {
-    let m = model.to_ascii_lowercase();
-    m.starts_with("gpt")
-        || m.starts_with("o1")
-        || m.starts_with("o3")
-        || m.starts_with("o4")
-        || m.starts_with("chatgpt")
+    OPENAI_PREFIXES.iter().any(|p| model.starts_with(p))
 }
 
 /// The tiktoken encoding for an OpenAI model: `cl100k_base` for the GPT-4/3.5
 /// generation, `o200k_base` for gpt-4o / gpt-4.1 / gpt-5 / o-series (and as the
-/// modern default).
+/// modern default). Expects an already-lowercased name (see [`estimate_usage`]).
 fn openai_encoding(model: &str) -> &'static CoreBPE {
-    let m = model.to_ascii_lowercase();
-    if m.starts_with("gpt-3.5") || m == "gpt-4" || m.starts_with("gpt-4-") {
+    if model.starts_with("gpt-3.5") || model == "gpt-4" || model.starts_with("gpt-4-") {
         cl100k()
     } else {
         o200k()
@@ -51,8 +49,10 @@ pub(crate) fn estimate_usage(
     completion: &str,
     tool_calls: &[ToolCall],
 ) -> Usage {
-    if is_openai(model) {
-        let enc = openai_encoding(model);
+    // Normalize the model name once; both helpers expect lowercase.
+    let lower = model.to_ascii_lowercase();
+    if is_openai(&lower) {
+        let enc = openai_encoding(&lower);
         // Chat-format accounting: 3 tokens per message + role + content, plus 3
         // tokens priming the assistant reply (matches num_tokens_from_messages).
         let mut prompt = 3usize;
