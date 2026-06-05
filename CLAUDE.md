@@ -26,9 +26,10 @@ Three layers over a provider-neutral core, so adding a provider is a new adapter
   fixtures (model + last user message, scoped to endpoint + stream). Record proxies
   misses to the real upstream and saves them (streams captured with real timing).
 
-SSE streams are **hand-built byte streams** (`Body::from_stream`), never a
-framework SSE helper — we need exact control of the bytes. Serde struct field
-order is the on-the-wire order; keep it matching the real API.
+SSE framing is serialized by hand in `src/sse.rs` (`data: <json>\n\n`), streamed
+as a raw body (`Body::from_stream`), not via axum's `Sse`/`Event` helper — we need
+exact control of the bytes. Serde struct field order is the on-the-wire order;
+keep it matching the real API.
 
 ## Commit messages
 
@@ -100,8 +101,8 @@ Project docs (`README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`) share one voice
 Match it when editing or adding docs:
 
 - Lead with what and why, not how. State what a feature does and the problem it
-  solves before any mechanism. Justify non-obvious behaviour (why SSE is
-  hand-built, why burstiness is mean-preserving); a claim without its reason is
+  solves before any mechanism. Justify non-obvious behaviour (why we serialize
+  SSE by hand, why burstiness is mean-preserving); a claim without its reason is
   half a sentence.
 - Show, then explain. Pair each capability with a minimal, copy-pasteable example
   (a YAML rule, a shell command, an SDK snippet), then a tight prose explanation.
