@@ -45,9 +45,8 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      # QEMU lets the amd64 runner build the arm64 image too. Released images are
-      # multi-arch; the per-commit edge image (docker-edge.yml) stays amd64 for
-      # fast feedback, since emulated arm64 builds are slow.
+      # QEMU lets the amd64 runner build the arm64 image too; released images are
+      # multi-arch. (CI builds a single-arch image without pushing; see ci.yml.)
       - uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -57,6 +56,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         id: meta
+        env:
+          # Write OCI annotations onto both the per-arch manifests and the
+          # multi-arch image index (default is only the manifest).
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ghcr.io/${{ github.repository }}
           # Moving tags for a release: exact version, major.minor, major, latest.
@@ -72,9 +75,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          # Attach supply-chain attestations to the published image: SLSA build
+          # provenance and an SBOM, both as referrer manifests in the index.
+          provenance: mode=max
+          sbom: true
           # No cache on release builds: a release is a trust anchor, so it builds
           # clean from source rather than risk pulling a poisoned layer from the
           # shared gha cache. (The Dockerfile's BuildKit cache mounts are
           # builder-local and start empty on a fresh runner, so they carry no
-          # state between runs.) The edge workflow keeps the cache for speed.
-          provenance: false
+          # state between runs.)
