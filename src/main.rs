@@ -1,7 +1,8 @@
 //! llmock — a fast, byte-faithful emulator of LLM provider HTTP APIs.
 //!
-//! Milestone 1: OpenAI Chat Completions (non-streaming) + the Models endpoints,
-//! served against a YAML fixture set.
+//! Serves canned fixture responses, or replayed cassettes, that match the
+//! OpenAI, Anthropic, and Google Gemini wire formats against a YAML fixture set.
+//! This module wires the server: routing, shared state, and startup.
 
 mod adapters;
 mod cassette;

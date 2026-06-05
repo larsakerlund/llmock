@@ -80,8 +80,8 @@ impl ApiError {
         }
     }
 
-    /// A capability llmock has not implemented yet. Kept for endpoints still on
-    /// the roadmap.
+    /// A 501 response for a capability llmock does not implement. Currently
+    /// unused; kept so an endpoint can signal not-implemented.
     #[allow(dead_code)]
     pub(crate) fn not_implemented(message: impl Into<String>) -> Self {
         ApiError::new(

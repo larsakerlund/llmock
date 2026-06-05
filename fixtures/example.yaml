@@ -21,7 +21,7 @@ rules:
     respond:
       content: "Mock reply from the gpt-4o-mini fixture."
 
-  # --- Error / failure injection (M3) ---
+  # --- Error / failure injection ---
 
   - match:
       user_contains: "boom"            # force a rate-limit error
@@ -47,7 +47,7 @@ rules:
         kind: truncate
         after_tokens: 4
 
-  # --- Tool / function calling (M4) ---
+  # --- Tool / function calling ---
 
   - match:
       user_contains: "forecast"        # respond with a tool call instead of text
