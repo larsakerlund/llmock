@@ -9,7 +9,7 @@ requires-python = ">=3.9"
 dependencies = [
     "openai==1.99.1",
     "anthropic==0.62.0",
-    "google-genai==1.29.0",
+    "google-genai==1.47.0",
 ]
 
 [tool.uv]
