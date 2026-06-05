@@ -86,12 +86,15 @@ Burstiness/jitter are disabled under `--deterministic` for reproducible runs.
 
 **Streaming has realistic defaults** so it feels like a real model out of the
 box, derived from measurements of real APIs (time-to-first-token dominates, and
-per-token gaps are bursty): `ttft_ms 700`, `inter_token_ms 20`, `burstiness 0.7`,
-`chunk_by word`. Override per-rule, or fleet-wide via `--default-ttft-ms`,
-`--default-inter-token-ms`, `--default-burstiness`, `--default-jitter-ms`,
-`--default-chunk-by` — e.g. set the delays to `0` for instant streaming in a fast
-test suite. (Recorded cassettes ignore these and replay their own real timing;
-see `--replay-speed`.)
+per-token gaps are bursty). The defaults are **per-model**: the timing is keyed
+on the request's model — gpt-4o, gpt-5 nano/mini, the o-series, claude, haiku,
+gemini each get their own measured pace, with a generic fallback for unknown
+models — so a stream paces like the model it stands in for. Override per-rule,
+or fleet-wide via `--default-ttft-ms`, `--default-inter-token-ms`,
+`--default-burstiness`, `--default-jitter-ms`, `--default-chunk-by`; a flag you
+set applies to every model, and an unset flag resolves per-model. Set the delays
+to `0` for instant streaming in a fast test suite. (Recorded cassettes ignore
+these and replay their own real timing; see `--replay-speed`.)
 
 ### Error & failure injection
 
@@ -267,6 +270,7 @@ HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
 - `src/cassette.rs`             — record/replay, matched by the same rules
 - `src/sse.rs`                  — shared SSE framing + fault handling
 - `src/stream.rs`               — text chunking + timing
+- `src/tokenize.rs`             — usage token counts (tiktoken + fallback)
 - `src/util.rs`                 — id/timestamp helpers
 
 Adding a provider is a new `adapters/<provider>/` module (request parse + wire
@@ -301,8 +305,12 @@ our bytes and yield the expected objects, the format is faithful.
   `cache_creation`, `service_tier`, `inference_geo`). The residual gaps are rare
   server quirks — notably some providers pad streaming SSE with whitespace, which
   only cassette replay reproduces exactly. When in doubt, record.
-- **Token counts are approximate.** `usage` is a word-count heuristic, not a real
-  tokenizer, so counts won't match a specific model.
+- **Token counts: exact for OpenAI, estimated elsewhere.** When a fixture doesn't
+  pin `usage`, OpenAI models are counted with the real `tiktoken` encoding
+  (including the chat-format overhead `api.openai.com` reports), so counts match.
+  Anthropic and Gemini publish no tokenizer, so they fall back to a ~4-chars/token
+  estimate — within a token or two in practice; record a cassette for exact counts
+  there (it carries the upstream's own `usage`).
 - **Model-specific behaviour is developer-authored.** Things that genuinely vary
   by model — extended thinking/reasoning items, vision, refusals, specific stop
   reasons — aren't emulated automatically; you express whatever you need in your
