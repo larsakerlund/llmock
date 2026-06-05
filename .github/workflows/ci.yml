@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -12,12 +19,17 @@ jobs:
   lint-and-test:
     name: fmt, clippy, test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      # Pinned to match rust-toolchain.toml so CI clippy == local clippy.
+      # Read the channel from rust-toolchain.toml so the pinned version lives
+      # in one place and CI clippy == local clippy.
+      - id: tc
+        name: read toolchain channel
+        run: echo "channel=$(grep -oP 'channel\s*=\s*\"\K[^\"]+' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.88.0"
+          toolchain: ${{ steps.tc.outputs.channel }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: rustfmt
@@ -27,17 +39,49 @@ jobs:
       - name: test
         run: cargo test --all-targets
 
+  docs:
+    name: doc (deny warnings)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - id: tc
+        name: read toolchain channel
+        run: echo "channel=$(grep -oP 'channel\s*=\s*\"\K[^\"]+' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tc.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc
+        run: cargo doc --no-deps
+
+  cargo-deny:
+    name: supply-chain (advisories, licenses, bans, sources)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
   sdk-e2e:
     name: real-SDK e2e (OpenAI, Anthropic, Gemini)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - id: tc
+        name: read toolchain channel
+        run: echo "channel=$(grep -oP 'channel\s*=\s*\"\K[^\"]+' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.88.0"
+          toolchain: ${{ steps.tc.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: run SDK-compat suites
-        run: ./tests/sdk_compat/run.sh
+        run: ./e2e/sdk_compat/run.sh

@@ -1,0 +1,47 @@
+# cargo-deny configuration: the supply-chain gate run in CI.
+#
+# `cargo deny check` enforces four sections: advisories (RUSTSEC), licenses,
+# bans (duplicate/forbidden crates), and sources (where crates come from).
+
+[advisories]
+# Deny known-vulnerable and unmaintained dependencies. The default behaviour of
+# recent cargo-deny is already "deny vulnerabilities and unmaintained crates",
+# so we only list explicit exceptions below.
+yanked = "deny"
+
+[licenses]
+# Permissive allow-list, checked against every license string in the current
+# dependency tree. Copyleft beyond MPL-2.0 is not allowed; add a new entry only
+# after confirming the crate's license is permissive.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    # webpki-roots ships Mozilla's root CA bundle under the Community Data
+    # License Agreement (permissive variant), pulled in transitively by
+    # reqwest's rustls-tls feature.
+    "CDLA-Permissive-2.0",
+]
+# A crate scoring below this confidence on license-text detection is treated as
+# unlicensed and fails the check.
+confidence-threshold = 0.8
+
+[bans]
+# Multiple versions of the same crate are common transitively; warn rather than
+# fail so the build stays green while we keep an eye on duplication.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+# Only crates.io is allowed as a registry; unknown registries and git sources
+# fail the check.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
