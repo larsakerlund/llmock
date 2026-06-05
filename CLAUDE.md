@@ -39,6 +39,12 @@ Body (after a blank line):
 - Wrap at 72 columns. Explain **what** and **why**, not how. Imperative mood.
 - Reference behaviour/spec, not implementation trivia.
 
+Breaking changes:
+- Append `!` after the type in the subject (e.g. `feat!: ...`) **and** add a
+  `BREAKING CHANGE: <what broke and how to migrate>` footer after the body,
+  separated by a blank line.
+- A `BREAKING CHANGE:` footer may accompany any `<type>`, not just `feat`.
+
 Example:
 ```
 feat: add anthropic messages adapter
@@ -84,5 +90,3 @@ behaviour) and the milestone roadmap.
 
 - Each milestone/feature is done on its own branch, then fast-forward merged to
   `main` and pushed.
-- Personal repo: commit author email is `lars@aakerlund.se`; commits are signed
-  via 1Password (`op-ssh-sign`).
