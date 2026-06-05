@@ -69,9 +69,9 @@ services:
     command: ["--fixtures", "/fixtures/example.yaml"]
 ```
 
-Tags: `latest` is the newest release, `0.1` / `0` track the latest minor/major,
-and `edge` follows `main`. The image binds `0.0.0.0` (the bare binary defaults
-to `127.0.0.1`) and ships a `/healthz` HEALTHCHECK.
+Tags: `latest` is the newest release, and `0.1` / `0` track the latest
+minor/major. The image binds `0.0.0.0` (the bare binary defaults to
+`127.0.0.1`) and ships a `/healthz` HEALTHCHECK.
 
 ### Build from source
 
