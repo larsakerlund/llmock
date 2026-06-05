@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     ChunkBy, Fault, InjectError, NeutralRequest, NeutralResponse, Outcome, StopReason,
-    StreamDefaults, ToolCall, Usage,
+    StreamDefaults, StreamSpec, ToolCall, Usage,
 };
 use crate::util;
 
@@ -184,6 +184,29 @@ pub(crate) struct FixtureStream {
     pub chunk_by: Option<ChunkByConfig>,
 }
 
+impl FixtureStream {
+    /// Apply each present override onto `spec`; absent fields are left as the
+    /// already-resolved defaults.
+    fn apply_overrides(&self, spec: &mut StreamSpec) {
+        if let Some(t) = self.ttft_ms {
+            spec.ttft_ms = t;
+        }
+        if let Some(it) = self.inter_token_ms {
+            spec.inter_token_ms = it;
+        }
+        if let Some(j) = self.jitter_ms {
+            spec.jitter_ms = j;
+        }
+        if let Some(burst) = self.burstiness {
+            spec.burstiness = burst;
+        }
+        if let Some(cb) = &self.chunk_by {
+            // Validated at load; fall back to the default on the off chance.
+            spec.chunk_by = cb.resolve().unwrap_or(spec.chunk_by);
+        }
+    }
+}
+
 /// `chunk_by` in YAML may be a string (`word`/`char`) or a number (chars/chunk).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
@@ -196,7 +219,19 @@ impl ChunkByConfig {
     fn resolve(&self) -> Result<ChunkBy, String> {
         match self {
             ChunkByConfig::Named(s) => ChunkBy::parse(s),
-            ChunkByConfig::Size(n) => ChunkBy::parse(&n.to_string()),
+            // Construct the variant directly rather than round-tripping through
+            // a string, mirroring `ChunkBy::parse`'s `n > 0` filter (and its
+            // error for `0`) exactly.
+            ChunkByConfig::Size(n) => {
+                if *n > 0 {
+                    Ok(ChunkBy::Chars(*n))
+                } else {
+                    Err(format!(
+                        "invalid chunk_by {:?} (expected `word`, `char`, or a positive integer)",
+                        n.to_string()
+                    ))
+                }
+            }
         }
     }
 }
@@ -378,22 +413,7 @@ impl Fixtures {
         // Resolve streaming spec: per-model defaults, then per-rule overrides.
         let mut spec = defaults.resolve(&req.model);
         if let Some(fs) = &respond.stream {
-            if let Some(t) = fs.ttft_ms {
-                spec.ttft_ms = t;
-            }
-            if let Some(it) = fs.inter_token_ms {
-                spec.inter_token_ms = it;
-            }
-            if let Some(j) = fs.jitter_ms {
-                spec.jitter_ms = j;
-            }
-            if let Some(burst) = fs.burstiness {
-                spec.burstiness = burst;
-            }
-            if let Some(cb) = &fs.chunk_by {
-                // Validated at load; fall back to the default on the off chance.
-                spec.chunk_by = cb.resolve().unwrap_or(spec.chunk_by);
-            }
+            fs.apply_overrides(&mut spec);
         }
 
         Some(Outcome::Respond(NeutralResponse {
