@@ -16,11 +16,11 @@ use axum::{Json, Router};
 
 use super::error::ApiError;
 use crate::cassette::Endpoint;
-use crate::engine::{resolve, Resolution};
+use crate::engine::{Resolution, resolve};
 use crate::state::AppState;
 use crate::util;
 use request::ResponsesRequest;
-use response::{completed_response, ResponseIds};
+use response::{ResponseIds, completed_response};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/responses", post(responses))

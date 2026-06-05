@@ -1,5 +1,5 @@
 # Pin the toolchain so local and CI run the same rustc/clippy and agree on
 # lints. Bump deliberately (and re-run `cargo clippy` locally when you do).
 [toolchain]
-channel = "1.88.0"
+channel = "1.96.0"
 components = ["rustfmt", "clippy"]

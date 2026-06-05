@@ -43,13 +43,13 @@ impl ResponsesRequest {
         let mut messages = Vec::new();
 
         // `instructions` acts like a system prompt.
-        if let Some(instr) = self.instructions {
-            if !instr.is_empty() {
-                messages.push(Message {
-                    role: "system".to_string(),
-                    content: instr,
-                });
-            }
+        if let Some(instr) = self.instructions
+            && !instr.is_empty()
+        {
+            messages.push(Message {
+                role: "system".to_string(),
+                content: instr,
+            });
         }
 
         match self.input {

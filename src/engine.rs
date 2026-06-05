@@ -7,7 +7,7 @@ use axum::body::Bytes;
 use axum::http::{HeaderMap, Method};
 use axum::response::Response;
 
-use crate::cassette::{record, Endpoint};
+use crate::cassette::{Endpoint, record};
 use crate::core::{InjectError, NeutralRequest, NeutralResponse, Outcome};
 use crate::state::AppState;
 

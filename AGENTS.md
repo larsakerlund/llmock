@@ -81,7 +81,7 @@ raises typed exceptions.
   sources from `deny.toml`); CI enforces it.
 - Keep `[package]` in `Cargo.toml` complete: `description`, `license`,
   `repository`, `readme`, `keywords`, `categories`, `rust-version`. MSRV
-  (`rust-version = "1.88"`) tracks `rust-toolchain.toml`, the single channel
+  (`rust-version = "1.96"`) tracks `rust-toolchain.toml`, the single channel
   source; bump both together.
 
 ## Test organization

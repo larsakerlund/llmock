@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
@@ -65,6 +65,10 @@ pub(crate) struct Cassette {
 /// The captured response. Non-streaming uses `body`; streaming uses `frames`,
 /// each replayed after its recorded inter-chunk delay so the original timing
 /// (including time-to-first-byte) is reproduced.
+// `into_response` streams via `async_stream::stream!`, whose expansion contains
+// `unsafe` (from pin-project). This crate writes no unsafe itself (it's
+// forbidden); the lint only sees the macro's, so silence it on this type.
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct StoredResponse {
     pub status: u16,
@@ -152,7 +156,7 @@ impl Cassettes {
             }
         }
         // Longer `user_contains` is more specific, so try it first.
-        entries.sort_by(|a, b| b.match_.specificity().cmp(&a.match_.specificity()));
+        entries.sort_by_key(|c| std::cmp::Reverse(c.match_.specificity()));
         Ok(Cassettes { entries })
     }
 
@@ -397,29 +401,39 @@ mod tests {
         let store = Cassettes::load(dir.path()).expect("load");
 
         // Exact endpoint + stream + model, message contains the needle: hit.
-        assert!(store
-            .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather now", false))
-            .is_some());
+        assert!(
+            store
+                .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather now", false))
+                .is_some()
+        );
 
         // Wrong endpoint: miss.
-        assert!(store
-            .find(Endpoint::Anthropic, &req("gpt-4o", "weather", false))
-            .is_none());
+        assert!(
+            store
+                .find(Endpoint::Anthropic, &req("gpt-4o", "weather", false))
+                .is_none()
+        );
 
         // Wrong streaming mode: miss.
-        assert!(store
-            .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather", true))
-            .is_none());
+        assert!(
+            store
+                .find(Endpoint::OpenAiChat, &req("gpt-4o", "weather", true))
+                .is_none()
+        );
 
         // Wrong model: miss.
-        assert!(store
-            .find(Endpoint::OpenAiChat, &req("gpt-4o-mini", "weather", false))
-            .is_none());
+        assert!(
+            store
+                .find(Endpoint::OpenAiChat, &req("gpt-4o-mini", "weather", false))
+                .is_none()
+        );
 
         // Message lacks the needle: miss.
-        assert!(store
-            .find(Endpoint::OpenAiChat, &req("gpt-4o", "forecast", false))
-            .is_none());
+        assert!(
+            store
+                .find(Endpoint::OpenAiChat, &req("gpt-4o", "forecast", false))
+                .is_none()
+        );
     }
 
     #[test]

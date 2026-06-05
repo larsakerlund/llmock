@@ -1,8 +1,8 @@
 //! Gemini (Google API) error envelopes: `{"error":{"code","message","status"}}`.
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 use crate::core::InjectError;

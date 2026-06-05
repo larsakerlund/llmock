@@ -7,9 +7,9 @@
 //! it. Regenerate the expected strings with `cargo test tests::wire::dump --
 //! --ignored --nocapture`.
 
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::Router;
 use http_body_util::BodyExt;
 use regex::Regex;
 use tower::ServiceExt;

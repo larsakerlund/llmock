@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml/badge.svg)](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](rust-toolchain.toml)
+[![Rust](https://img.shields.io/badge/rust-1.96+-orange.svg)](rust-toolchain.toml)
 
 A fast, byte-faithful emulator of LLM provider HTTP APIs, for testing your app
 without access to a real LLM. Point your SDK's `base_url` at llmock and it serves
@@ -39,7 +39,7 @@ you control.
 
 ## Installation
 
-llmock is a single Rust binary. Build it from source (Rust 1.88+, pinned in
+llmock is a single Rust binary. Build it from source (Rust 1.96+, pinned in
 [`rust-toolchain.toml`](rust-toolchain.toml)):
 
 ```sh

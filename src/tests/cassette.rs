@@ -6,10 +6,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::http::{header, Request, StatusCode};
-use axum::routing::any;
 use axum::Router;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use axum::routing::any;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
@@ -221,12 +221,14 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     );
     assert!(cassette.response.body.is_none());
     assert!(cassette.response.frames.len() >= 2);
-    assert!(cassette
-        .response
-        .frames
-        .iter()
-        .skip(1)
-        .any(|f| f.delay_ms > 0));
+    assert!(
+        cassette
+            .response
+            .frames
+            .iter()
+            .skip(1)
+            .any(|f| f.delay_ms > 0)
+    );
 
     // Replay at real speed (1.0) re-applies the recorded timing.
     let body_req =

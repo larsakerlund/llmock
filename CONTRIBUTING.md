@@ -6,7 +6,7 @@ the checks every change must pass, and the conventions the project follows.
 ## Development setup
 
 llmock is a Rust project. The toolchain is pinned in
-[`rust-toolchain.toml`](rust-toolchain.toml) (Rust 1.88+); rustup picks it up
+[`rust-toolchain.toml`](rust-toolchain.toml) (Rust 1.96+); rustup picks it up
 automatically.
 
 ```sh
@@ -46,7 +46,7 @@ cargo deny check
 
 Keep the `[package]` table in `Cargo.toml` complete and current:
 `description`, `license`, `repository`, `readme`, `keywords`, `categories`, and
-`rust-version`. The MSRV (`rust-version = "1.88"`) tracks
+`rust-version`. The MSRV (`rust-version = "1.96"`) tracks
 [`rust-toolchain.toml`](rust-toolchain.toml), which stays the single source for
 the toolchain channel; bump both together.
 

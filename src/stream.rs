@@ -98,7 +98,7 @@ pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
 /// mean to avoid a pathological multi-second stall.
 fn burst_gap(base: u64, burstiness: f64, rng: &mut impl Rng) -> u64 {
     let b = burstiness.clamp(0.0, 0.95);
-    if base == 0 || rng.gen::<f64>() < b {
+    if base == 0 || rng.gen_range(0.0..1.0) < b {
         return 0;
     }
     #[allow(clippy::cast_precision_loss)]

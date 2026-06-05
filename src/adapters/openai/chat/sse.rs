@@ -13,7 +13,7 @@
 use std::convert::Infallible;
 
 use axum::body::{Body, Bytes};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::Response;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
@@ -24,7 +24,7 @@ use crate::sse::{data as frame, execute_fault, fault_after};
 use crate::stream::{chunk_text, inter_token_delay, step_delay};
 use crate::util;
 
-use super::response::{finish_reason_str, Usage};
+use super::response::{Usage, finish_reason_str};
 
 /// A deliberately broken frame for the `malformed` fault.
 const MALFORMED: &[u8] =
@@ -71,11 +71,9 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
         //    configured, stop once `after` deltas have been emitted.
         let mut triggered: Option<Fault> = None;
         for (i, piece) in pieces.iter().enumerate() {
-            if let Some(f) = fault {
-                if fault_after(f) == i {
-                    triggered = Some(f);
-                    break;
-                }
+            if let Some(f) = fault && fault_after(f) == i {
+                triggered = Some(f);
+                break;
             }
             if let Some(d) = step_delay(&spec, i) {
                 sleep(d).await;
@@ -93,12 +91,8 @@ pub(crate) fn stream_response(resp: &NeutralResponse, include_usage: bool) -> Re
             yield Ok(frame(&chunk));
         }
         // A fault whose `after` is at/beyond the content length triggers now.
-        if triggered.is_none() {
-            if let Some(f) = fault {
-                if fault_after(f) >= pieces.len() {
-                    triggered = Some(f);
-                }
-            }
+        if triggered.is_none() && let Some(f) = fault && fault_after(f) >= pieces.len() {
+            triggered = Some(f);
         }
 
         if let Some(f) = triggered {

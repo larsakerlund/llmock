@@ -285,10 +285,10 @@ impl Match {
     }
 
     pub(crate) fn matches(&self, req: &NeutralRequest) -> bool {
-        if let Some(model) = &self.model {
-            if &req.model != model {
-                return false;
-            }
+        if let Some(model) = &self.model
+            && &req.model != model
+        {
+            return false;
         }
         if let Some(needle) = &self.user_contains {
             match req.last_user_message() {
@@ -316,12 +316,12 @@ impl Fixtures {
             // Each rule must do exactly one thing.
             match (&rule.respond, &rule.error) {
                 (None, None) => {
-                    return Err(format!("rule {i}: needs a `respond` or an `error` block"))
+                    return Err(format!("rule {i}: needs a `respond` or an `error` block"));
                 }
                 (Some(_), Some(_)) => {
                     return Err(format!(
                         "rule {i}: has both `respond` and `error`; use only one"
-                    ))
+                    ));
                 }
                 _ => {}
             }

@@ -14,7 +14,7 @@
 use std::convert::Infallible;
 
 use axum::body::{Body, Bytes};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::Response;
 use serde::Serialize;
 use serde_json::Value;
@@ -25,7 +25,7 @@ use crate::sse::{event, execute_fault, fault_after};
 use crate::stream::{chunk_text, inter_token_delay, step_delay};
 use crate::util;
 
-use super::response::{stop_reason_str, ContentBlock, TextBlock, ToolUseBlock, Usage};
+use super::response::{ContentBlock, TextBlock, ToolUseBlock, Usage, stop_reason_str};
 
 /// A deliberately broken frame for the `malformed` fault.
 const MALFORMED: &[u8] = b"event: content_block_delta\ndata: {BROKEN\n\n";
@@ -75,8 +75,9 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
             let pieces = chunk_text(&resp.content, spec.chunk_by);
             let mut triggered: Option<Fault> = None;
             for (idx, piece) in pieces.iter().enumerate() {
-                if let Some(f) = fault {
-                    if fault_after(f) == idx { triggered = Some(f); break; }
+                if let Some(f) = fault && fault_after(f) == idx {
+                    triggered = Some(f);
+                    break;
                 }
                 if let Some(d) = step_delay(&spec, idx) {
                     sleep(d).await;
@@ -86,10 +87,8 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
                     delta: DeltaKind::Text { delta_type: "text_delta", text: piece.clone() },
                 }));
             }
-            if triggered.is_none() {
-                if let Some(f) = fault {
-                    if fault_after(f) >= pieces.len() { triggered = Some(f); }
-                }
+            if triggered.is_none() && let Some(f) = fault && fault_after(f) >= pieces.len() {
+                triggered = Some(f);
             }
             if let Some(f) = triggered {
                 // End the stream without message_delta / message_stop.

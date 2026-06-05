@@ -1,9 +1,9 @@
 //! OpenAI-shaped error envelopes. The real SDKs branch on `error.type` and the
 //! HTTP status, so both must be faithful.
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 use crate::core::InjectError;

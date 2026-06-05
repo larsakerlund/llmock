@@ -13,7 +13,7 @@ use axum::{Json, Router};
 
 use super::error::ApiError;
 use crate::cassette::Endpoint;
-use crate::engine::{resolve, Resolution};
+use crate::engine::{Resolution, resolve};
 use crate::state::AppState;
 use request::ChatCompletionRequest;
 use response::ChatCompletion;

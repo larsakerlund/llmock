@@ -18,7 +18,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 
 use crate::cassette::Endpoint;
-use crate::engine::{resolve, Resolution};
+use crate::engine::{Resolution, resolve};
 use crate::state::AppState;
 use error::ApiError;
 use request::GenerateRequest;
@@ -49,7 +49,7 @@ async fn generate(
         other => {
             return Err(ApiError::invalid_request(format!(
                 "unknown action {other:?} (expected generateContent or streamGenerateContent)"
-            )))
+            )));
         }
     };
 

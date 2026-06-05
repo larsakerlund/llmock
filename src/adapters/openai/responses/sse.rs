@@ -22,7 +22,7 @@
 use std::convert::Infallible;
 
 use axum::body::{Body, Bytes};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::Response;
 use serde::Serialize;
 use tokio::time::sleep;
@@ -33,8 +33,8 @@ use crate::stream::{chunk_text, inter_token_delay, step_delay};
 use crate::util;
 
 use super::response::{
-    completed_response, initial_response, FunctionCallItem, MessageItem, OutputItem, OutputText,
-    ResponseIds, ResponseObject,
+    FunctionCallItem, MessageItem, OutputItem, OutputText, ResponseIds, ResponseObject,
+    completed_response, initial_response,
 };
 
 /// A deliberately broken frame for the `malformed` fault.
@@ -93,8 +93,9 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
             let pieces = chunk_text(&resp.content, spec.chunk_by);
             let mut triggered: Option<Fault> = None;
             for (i, piece) in pieces.iter().enumerate() {
-                if let Some(f) = fault {
-                    if fault_after(f) == i { triggered = Some(f); break; }
+                if let Some(f) = fault && fault_after(f) == i {
+                    triggered = Some(f);
+                    break;
                 }
                 if let Some(d) = step_delay(&spec, i) {
                     sleep(d).await;
@@ -106,10 +107,8 @@ pub(crate) fn stream_response(resp: &NeutralResponse) -> Response {
                     delta: piece, logprobs: &[],
                 }));
             }
-            if triggered.is_none() {
-                if let Some(f) = fault {
-                    if fault_after(f) >= pieces.len() { triggered = Some(f); }
-                }
+            if triggered.is_none() && let Some(f) = fault && fault_after(f) >= pieces.len() {
+                triggered = Some(f);
             }
             if let Some(f) = triggered {
                 // End the stream without response.completed.

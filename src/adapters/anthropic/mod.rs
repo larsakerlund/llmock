@@ -17,7 +17,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 
 use crate::cassette::Endpoint;
-use crate::engine::{resolve, Resolution};
+use crate::engine::{Resolution, resolve};
 use crate::state::AppState;
 use crate::util;
 use error::ApiError;
