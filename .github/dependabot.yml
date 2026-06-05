@@ -38,3 +38,15 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+
+  # e2e provider SDKs (Python), managed by uv. These are test tooling, not the
+  # app's runtime, so every bump lands as build (hidden from the changelog).
+  - package-ecosystem: uv
+    directory: "/e2e/sdk_compat"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      uv-minor:
+        update-types: ["minor", "patch"]
