@@ -42,15 +42,17 @@ response on `0.0.0.0:8080`:
 docker run --rm -p 8080:8080 ghcr.io/larsakerlund/llmock:latest
 ```
 
-Then point any OpenAI client at it:
+Then point your provider's SDK at it. For example, with OpenAI's Python client:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8080/openai/v1", api_key="sk-llmock-dummy")
-print(client.chat.completions.create(
+
+client = OpenAI(base_url="http://localhost:8080/openai/v1", api_key="unused")
+response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "what's the weather?"}],
-).choices[0].message.content)
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
 # -> "This is a mock response from llmock."
 ```
 
@@ -219,16 +221,18 @@ so the genuine SDK reassembles them into valid JSON. Argument fragmentation
 follows the same `chunk_by` granularity as text (use `chunk_by: char` for
 fine-grained fragments).
 
-## Record & replay (cassettes)
+## Record & replay
 
 For the highest fidelity, replay real captured responses instead of hand-written
 fixtures. Replay is byte-for-byte exact.
 
 ### Record your own
 
-1. Start llmock in record mode, pointed at a directory for the cassettes:
+1. Start the container in record mode, mounting a writable directory for the
+   cassettes (recordings are written as the image's `llmock` user):
    ```sh
-   llmock --cassette-dir ./cassettes --record
+   docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes" \
+     ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes --record
    ```
 2. Point your app or SDK's base URL at llmock, using your real API key as usual
    (llmock forwards your auth header upstream):
@@ -244,24 +248,14 @@ fixtures. Replay is byte-for-byte exact.
    the real provider (chosen by endpoint, or by `--upstream`), saved under
    `--cassette-dir`, and the genuine bytes are returned to your app. Fire as many
    as you like; each distinct request becomes its own cassette.
-4. Replay offline by restarting without `--record` (cassettes load at startup):
+4. Replay offline by restarting without `--record` (the volume can be read-only
+   now; cassettes load at startup):
    ```sh
-   llmock --cassette-dir ./cassettes
+   docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes:ro" \
+     ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes
    ```
    Now there is no key and no network, and replays are byte-for-byte the real
    responses.
-
-In a container, pass the same flags as arguments and mount a writable cassette
-volume (record writes to it as the image's `llmock` user):
-
-```sh
-# record (needs network egress and your real key, sent by the client)
-docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes" \
-  ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes --record
-# replay (offline; the volume can be read-only now)
-docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes:ro" \
-  ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes
-```
 
 `--upstream` overrides the real provider. Point it at a proxy, a gateway, or (for
 Azure) your resource, so that `<upstream>/v1/chat/completions` is the real URL.
