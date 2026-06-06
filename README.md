@@ -11,7 +11,7 @@ responses that look exactly like the real provider: the same JSON shapes, the
 same streaming wire format, and the same error envelopes. One emulator covers
 OpenAI, Anthropic, and Google Gemini.
 
-## Why
+## Why llmock
 
 Testing an LLM-backed app against the real API is slow, costly, and
 non-deterministic, and it needs network access and keys. Mocking at the HTTP
@@ -21,8 +21,7 @@ you control.
 
 ## Features
 
-- OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and Google
-  Gemini, all driven by one fixture set.
+- OpenAI, Anthropic, and Google Gemini, all driven by one fixture set.
 - Real wire format: exact JSON shapes, native SSE streaming, and provider error
   envelopes, verified by running the genuine provider SDKs end to end.
 - Configurable latency, with per-model defaults for time-to-first-token,
@@ -34,16 +33,29 @@ you control.
   streaming timing included.
 - A `--deterministic` mode for reproducible test runs.
 
-## Run it
+## Quick start
 
-The fastest path to a running mock is the published container. It listens on
-`0.0.0.0:8080` and serves the built-in fallback response with no configuration:
+Run the published container. With no configuration it serves a built-in fallback
+response on `0.0.0.0:8080`:
 
 ```sh
 docker run --rm -p 8080:8080 ghcr.io/larsakerlund/llmock:latest
 ```
 
-To serve your own fixtures, mount a file and point `--fixtures` at it:
+Then point any OpenAI client at it:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8080/openai/v1", api_key="sk-llmock-dummy")
+print(client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "what's the weather?"}],
+).choices[0].message.content)
+# -> "This is a mock response from llmock."
+```
+
+To return responses keyed on the request, write your own fixtures and mount them
+(see [Fixtures](#fixtures)):
 
 ```sh
 docker run --rm -p 8080:8080 \
@@ -66,7 +78,8 @@ services:
 
 Tags: `latest` is the newest release, and `0.1` / `0` track the latest
 minor/major. The image binds `0.0.0.0` (the bare binary defaults to
-`127.0.0.1`) and ships a `/healthz` HEALTHCHECK.
+`127.0.0.1`) and ships a `/healthz` HEALTHCHECK. Run `llmock --help` for the full
+list of flags and environment variables.
 
 ### Build from source
 
@@ -81,26 +94,6 @@ cargo build --release
 ```
 
 Or run it directly during development with `cargo run --`.
-
-## Quick start
-
-Start llmock with the example fixtures:
-
-```sh
-cargo run -- --port 8080 --fixtures fixtures/example.yaml
-```
-
-Then point any OpenAI client at it:
-
-```python
-from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8080/openai/v1", api_key="sk-llmock-dummy")
-print(client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "what's the weather?"}],
-).choices[0].message.content)
-# -> "It's sunny and 22°C with a light breeze."
-```
 
 ## Fixtures
 
@@ -257,6 +250,18 @@ fixtures. Replay is byte-for-byte exact.
    ```
    Now there is no key and no network, and replays are byte-for-byte the real
    responses.
+
+In a container, pass the same flags as arguments and mount a writable cassette
+volume (record writes to it as the image's `llmock` user):
+
+```sh
+# record (needs network egress and your real key, sent by the client)
+docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes" \
+  ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes --record
+# replay (offline; the volume can be read-only now)
+docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes:ro" \
+  ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes
+```
 
 `--upstream` overrides the real provider. Point it at a proxy, a gateway, or (for
 Azure) your resource, so that `<upstream>/v1/chat/completions` is the real URL.
