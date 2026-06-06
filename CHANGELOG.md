@@ -3,11 +3,6 @@
 ## 0.1.0 (2026-06-06)
 
 
-### ⚠ BREAKING CHANGES
-
-* non-streaming responses now incur the same realistic latency as streaming ones by default. Set --default-ttft-ms 0 and --default-inter-token-ms 0 (or a per-rule stream block with zero delays) for instant non-streaming responses in a fast test suite.
-* provider endpoints are no longer served at the root path. Point each SDK's base_url at the provider prefix: OpenAI at
-
 ### Features
 
 * add --replay-speed to scale replayed stream timing ([20d0866](https://github.com/larsakerlund/llmock/commit/20d0866c24d711c0dbeb125adb6bf316ebe58d7a))
@@ -19,11 +14,9 @@
 * apply realistic latency to non-streaming responses ([9da649a](https://github.com/larsakerlund/llmock/commit/9da649a2ef6d4ac6c6e4ff9379eaff6d3cbeef97))
 * count usage with a real tokenizer where available ([5da7a63](https://github.com/larsakerlund/llmock/commit/5da7a63c5b66d31187523f0b1315ec85240cdafc))
 * default streaming timing per model with a fallback ([bdb62e9](https://github.com/larsakerlund/llmock/commit/bdb62e9c69d2866be78ad84fa863d24f0cc10a5a))
-* default streaming to realistic timing ([d3cce0d](https://github.com/larsakerlund/llmock/commit/d3cce0d2fd756ee2900ea5ebd3149fb2ed65e5f3))
 * forward the api-key header for azure openai recording ([8f15040](https://github.com/larsakerlund/llmock/commit/8f150409cb2e8b34f7b466a235b7a3b5d76bea57))
 * match the real anthropic wire bytes exactly ([b991a8d](https://github.com/larsakerlund/llmock/commit/b991a8de36e5f06bdfd1358b4c3c9a398972c935))
 * model bursty stream cadence with a mean-preserving mixture ([8af2551](https://github.com/larsakerlund/llmock/commit/8af2551e3e645702b6d204ac7edf5eca9bc01c8e))
-* mount each provider under a path prefix ([69f2005](https://github.com/larsakerlund/llmock/commit/69f2005fe51de89c8298d94f639c2359f99893cb))
 * reject oversized request bodies with a configurable limit ([24a135b](https://github.com/larsakerlund/llmock/commit/24a135b7d107ea18180583061b73d0f8bd8c358a))
 * replay streaming cassettes with their real timing ([10ad3c0](https://github.com/larsakerlund/llmock/commit/10ad3c05a94e19c9b9425e155318e4f2f8b3f1ca))
 * serve providers only under their /{provider} prefix ([d87db1a](https://github.com/larsakerlund/llmock/commit/d87db1a59295d82bee6cc3f7b3ca04683cd2ea46))
