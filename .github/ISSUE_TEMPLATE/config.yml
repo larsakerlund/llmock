@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/larsakerlund/llmock/security/advisories/new
+    about: >-
+      Found a vulnerability? Report it privately through GitHub Security
+      advisories instead of opening a public issue. See SECURITY.md.
+  - name: Questions and discussion
+    url: https://github.com/larsakerlund/llmock/discussions
+    about: Ask a question or discuss an idea before filing an issue.
