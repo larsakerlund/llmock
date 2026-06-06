@@ -104,7 +104,20 @@ pub(crate) struct Config {
     /// speed, `0` replays instantly (useful for fast test suites).
     #[arg(long, env = "LLMOCK_REPLAY_SPEED", default_value_t = 1.0)]
     pub replay_speed: f64,
+
+    /// Maximum request body size in bytes. Sized to the largest real provider
+    /// request cap (Anthropic ~32 MB) so a legitimate max-context prompt or an
+    /// inline base64 image/audio request is never clipped; lower it to harden.
+    /// This caps INPUT (request body) memory; it is independent of output
+    /// `max_tokens`, which the mock does not honor.
+    #[arg(long, env = "LLMOCK_MAX_BODY_BYTES", default_value_t = DEFAULT_MAX_BODY_BYTES)]
+    pub max_body_bytes: usize,
 }
+
+/// Default request body cap: 32 MiB, the largest real provider request cap
+/// (Anthropic ~32 MB). Shared by [`Config`] and [`crate::state::AppState`] so
+/// the CLI default and the test-state default cannot drift apart.
+pub(crate) const DEFAULT_MAX_BODY_BYTES: usize = 33_554_432;
 
 impl Config {
     /// Collect the global streaming defaults, validating `default_chunk_by` if

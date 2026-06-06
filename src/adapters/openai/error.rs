@@ -52,6 +52,15 @@ impl ApiError {
         ApiError::new(StatusCode::BAD_REQUEST, "invalid_request_error", message)
     }
 
+    /// Request body exceeds the configured `--max-body-bytes` limit.
+    pub(crate) fn payload_too_large(message: impl Into<String>) -> Self {
+        ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "invalid_request_error",
+            message,
+        )
+    }
+
     /// llmock could not find a fixture for this request — a mock-config problem,
     /// not something the real API produces. Flagged with a distinct type so it
     /// is obvious in test output.

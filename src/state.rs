@@ -22,6 +22,9 @@ pub(crate) struct AppState {
     /// Factor applied to recorded stream timing on replay (1.0 = real timing,
     /// 0 = instant). See `--replay-speed`.
     pub replay_speed: f64,
+    /// Maximum accepted request body size in bytes; a larger body gets a 413 in
+    /// the requesting adapter's own error envelope. See `--max-body-bytes`.
+    pub max_body_bytes: usize,
 }
 
 impl AppState {
@@ -33,6 +36,7 @@ impl AppState {
             record: None,
             client: reqwest::Client::new(),
             replay_speed: 1.0,
+            max_body_bytes: crate::config::DEFAULT_MAX_BODY_BYTES,
         }
     }
 
@@ -45,6 +49,11 @@ impl AppState {
         self.cassettes = Arc::new(cassettes);
         self.record = record;
         self.replay_speed = replay_speed;
+        self
+    }
+
+    pub(crate) fn with_max_body_bytes(mut self, n: usize) -> Self {
+        self.max_body_bytes = n;
         self
     }
 }

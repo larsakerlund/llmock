@@ -10,9 +10,7 @@ pub(crate) mod request;
 pub(crate) mod response;
 pub(crate) mod sse;
 
-use axum::body::Bytes;
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, Method, Uri};
+use axum::extract::{Path, Request, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
@@ -32,11 +30,12 @@ pub(crate) fn router() -> Router<AppState> {
 async fn generate(
     State(state): State<AppState>,
     Path(model_action): Path<String>,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
-    bytes: Bytes,
+    req: Request,
 ) -> Result<Response, ApiError> {
+    let (parts, body) = req.into_parts();
+    let bytes = axum::body::to_bytes(body, state.max_body_bytes)
+        .await
+        .map_err(|_| ApiError::payload_too_large("request body exceeds the configured limit"))?;
     // Split "<model>:<action>" — action selects streaming vs not.
     let (model, action) = model_action.rsplit_once(':').ok_or_else(|| {
         ApiError::invalid_request(format!(
@@ -61,11 +60,11 @@ async fn generate(
         &state,
         Endpoint::Gemini,
         &neutral,
-        &method,
-        uri.path(),
-        uri.query().unwrap_or(""),
+        &parts.method,
+        parts.uri.path(),
+        parts.uri.query().unwrap_or(""),
         &bytes,
-        &headers,
+        &parts.headers,
     )
     .await;
 

@@ -50,6 +50,12 @@ impl ApiError {
         ApiError::new(StatusCode::BAD_REQUEST, "invalid_request_error", message)
     }
 
+    /// Request body exceeds the configured `--max-body-bytes` limit. Anthropic's
+    /// real 413 uses error type `request_too_large`.
+    pub(crate) fn payload_too_large(message: impl Into<String>) -> Self {
+        ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "request_too_large", message)
+    }
+
     /// llmock could not find a fixture — flagged distinctly; not a real API error.
     pub(crate) fn no_fixture(message: impl Into<String>) -> Self {
         ApiError::new(

@@ -38,6 +38,29 @@ fn app() -> Router {
     ))
 }
 
+/// A test router with a small request-body cap, to exercise the 413 path.
+fn app_with_limit(max_body_bytes: usize) -> Router {
+    let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
+    build_app(
+        AppState::new(fixtures, crate::core::StreamDefaults::instant())
+            .with_max_body_bytes(max_body_bytes),
+    )
+}
+
+async fn post_app(app: Router, uri: &str, body: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let text = std::str::from_utf8(&bytes).unwrap().to_string();
+    (status, text)
+}
+
 /// Replace random ids and timestamps with stable placeholders.
 fn redact(s: &str) -> String {
     static IDS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
@@ -331,4 +354,77 @@ async fn non_stream_response_waits_for_the_model_latency() {
         start.elapsed() >= Duration::from_millis(80),
         "non-streaming response should wait ~the model latency"
     );
+}
+
+// --- Request body-size limit (413) ---
+
+/// A valid JSON body padded past the configured cap, so `to_bytes` overflows and
+/// each adapter must answer with its own 413 envelope.
+fn oversized_body(content_len: usize) -> String {
+    let filler = "x".repeat(content_len);
+    format!(r#"{{"model":"gpt-4o","messages":[{{"role":"user","content":"{filler}"}}]}}"#)
+}
+
+#[tokio::test]
+async fn openai_chat_body_too_large() {
+    let (status, out) = post_app(
+        app_with_limit(64),
+        "/openai/v1/chat/completions",
+        &oversized_body(1024),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let v: serde_json::Value = serde_json::from_str(&out).expect("OpenAI error envelope");
+    assert_eq!(v["error"]["type"], "invalid_request_error");
+}
+
+#[tokio::test]
+async fn openai_responses_body_too_large() {
+    let (status, out) = post_app(
+        app_with_limit(64),
+        "/openai/v1/responses",
+        &oversized_body(1024),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let v: serde_json::Value = serde_json::from_str(&out).expect("OpenAI error envelope");
+    assert_eq!(v["error"]["type"], "invalid_request_error");
+}
+
+#[tokio::test]
+async fn anthropic_body_too_large() {
+    let (status, out) = post_app(
+        app_with_limit(64),
+        "/anthropic/v1/messages",
+        &oversized_body(1024),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let v: serde_json::Value = serde_json::from_str(&out).expect("Anthropic error envelope");
+    assert_eq!(v["type"], "error");
+    assert_eq!(v["error"]["type"], "request_too_large");
+}
+
+#[tokio::test]
+async fn gemini_body_too_large() {
+    let (status, out) = post_app(
+        app_with_limit(64),
+        "/gemini/v1beta/models/gemini-2.0-flash:generateContent",
+        &oversized_body(1024),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let v: serde_json::Value = serde_json::from_str(&out).expect("Gemini error envelope");
+    assert_eq!(v["error"]["code"], 413);
+    assert_eq!(v["error"]["status"], "FAILED_PRECONDITION");
+}
+
+#[tokio::test]
+async fn body_just_under_limit_succeeds() {
+    // A small but legitimate body well under a generous cap is not clipped.
+    let body = r#"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}"#;
+    let cap = body.len() + 16;
+    let (status, out) = post_app(app_with_limit(cap), "/openai/v1/chat/completions", body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(out.contains("chat.completion"));
 }

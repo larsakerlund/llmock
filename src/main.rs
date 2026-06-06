@@ -68,7 +68,8 @@ async fn main() {
             config.host
         );
     }
-    let mut state = AppState::new(fixtures, stream_defaults);
+    let mut state =
+        AppState::new(fixtures, stream_defaults).with_max_body_bytes(config.max_body_bytes);
     if let Some(dir) = &config.cassette_dir {
         let store = exit_on_error(Cassettes::load(dir));
         tracing::info!(
@@ -116,12 +117,19 @@ fn exit_on_error<T>(r: Result<T, String>) -> T {
 /// mounting them all at root would collide; the prefix makes routing
 /// unambiguous. Shared by `main` and the in-process tests.
 fn build_app(state: AppState) -> Router {
+    // Defense-in-depth backstop only. Each handler buffers the body itself with
+    // `to_bytes(.., max_body_bytes)` and emits the provider's own 413 envelope,
+    // which is the primary mechanism. The layer is set slightly higher than the
+    // per-adapter cap so at exactly-over-limit the handler's faithful envelope
+    // wins; the layer catches only pathologically huge streams with a bare 413.
+    let backstop = state.max_body_bytes.saturating_add(1024);
     Router::new()
         .route("/healthz", get(healthz))
         // Provider-prefixed mounts.
         .nest("/openai", adapters::openai::router())
         .nest("/anthropic", adapters::anthropic::router())
         .nest("/gemini", adapters::gemini::router())
+        .layer(axum::extract::DefaultBodyLimit::max(backstop))
         .with_state(state)
 }
 

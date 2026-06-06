@@ -27,9 +27,9 @@ async fn chat_completions(
     req: Request,
 ) -> Result<Response, ApiError> {
     let (parts, body) = req.into_parts();
-    let bytes = axum::body::to_bytes(body, usize::MAX)
+    let bytes = axum::body::to_bytes(body, state.max_body_bytes)
         .await
-        .map_err(|_| ApiError::invalid_request("could not read request body"))?;
+        .map_err(|_| ApiError::payload_too_large("request body exceeds the configured limit"))?;
     let parsed: ChatCompletionRequest = serde_json::from_slice(&bytes)
         .map_err(|e| ApiError::invalid_request(format!("invalid request body: {e}")))?;
     let neutral = parsed.into_neutral();
