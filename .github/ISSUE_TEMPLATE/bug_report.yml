@@ -1,0 +1,40 @@
+name: Bug report
+description: A wire-format mismatch, crash, or other defect in llmock.
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >-
+        The request you sent and the response or error you got. A minimal
+        fixture or recorded cassette that reproduces it helps most.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider / endpoint
+      options:
+        - OpenAI Chat Completions
+        - OpenAI Responses
+        - Anthropic Messages
+        - Google Gemini
+        - Other / not sure
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: llmock version
+      description: Image tag or git commit.
+    validations:
+      required: false

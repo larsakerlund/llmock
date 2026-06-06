@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest a capability or provider for llmock.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to test that llmock cannot express today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like llmock to do? A fixture or YAML sketch helps.
+    validations:
+      required: false

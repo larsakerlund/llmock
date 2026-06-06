@@ -3,6 +3,13 @@
 Thanks for your interest in improving llmock. This guide covers the dev setup,
 the checks every change must pass, and the conventions the project follows.
 
+## Reporting bugs and asking questions
+
+Open an [issue](https://github.com/larsakerlund/llmock/issues); the templates
+guide bug reports and feature requests. The most useful bug report is the request
+you sent, the response or error you got, and what you expected. A minimal fixture
+or recorded cassette that reproduces it helps most.
+
 ## Development setup
 
 llmock is a Rust project. The toolchain is pinned in
@@ -142,10 +149,18 @@ versioned image to `ghcr.io/larsakerlund/llmock`. Don't edit `CHANGELOG.md` or
 the version by hand; write good commit messages and merge the release PR when you
 want to cut a release.
 
-## Workflow
+## Submitting changes
 
-Each feature is done on its own branch, then fast-forward merged to `main` and
-pushed.
+1. Fork the repository and create a branch from `main`.
+2. Make your change with tests. A new adapter or capability needs its real-SDK
+   e2e coverage (see
+   [Fidelity is verified by the real SDKs](#fidelity-is-verified-by-the-real-sdks)).
+3. Run the gate locally and keep it green: `cargo fmt`, `cargo clippy
+   --all-targets`, `cargo test`, and `cargo deny check`, plus
+   `./e2e/sdk_compat/run.sh` when you touch an adapter.
+4. Write [Conventional Commit](#commit-messages) messages.
+5. Open a pull request against `main`. CI runs the same gate; a maintainer
+   reviews and merges once it is green.
 
 ## License
 
