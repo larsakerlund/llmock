@@ -7,13 +7,9 @@
 
 A fast, byte-faithful emulator of LLM provider HTTP APIs, for testing your app
 without access to a real LLM. Point your SDK's `base_url` at llmock and it serves
-canned fixture responses that look exactly like the real provider: the same JSON
-shapes, the same streaming wire format, and the same error envelopes.
-
-> **Status:** early but multi-provider. Implements the OpenAI Chat Completions,
-> OpenAI Responses, Anthropic Messages, and Google Gemini APIs (streaming and
-> non-streaming, text and tool calls) with configurable latency and error/failure
-> injection, plus the Models endpoints. One fixture set drives all four.
+responses that look exactly like the real provider: the same JSON shapes, the
+same streaming wire format, and the same error envelopes. One emulator covers
+OpenAI, Anthropic, and Google Gemini.
 
 ## Why
 
@@ -47,8 +43,7 @@ The fastest path to a running mock is the published container. It listens on
 docker run --rm -p 8080:8080 ghcr.io/larsakerlund/llmock:latest
 ```
 
-To serve your own fixtures, mount a file and point `--fixtures` at it (fixtures
-are developer-owned; see [Fixtures](#fixtures)):
+To serve your own fixtures, mount a file and point `--fixtures` at it:
 
 ```sh
 docker run --rm -p 8080:8080 \
@@ -89,7 +84,7 @@ Or run it directly during development with `cargo run --`.
 
 ## Quick start
 
-Start the server (either `docker run ...` from above, or from source):
+Start llmock with the example fixtures:
 
 ```sh
 cargo run -- --port 8080 --fixtures fixtures/example.yaml
@@ -99,7 +94,7 @@ Then point any OpenAI client at it:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://127.0.0.1:8080/openai/v1", api_key="sk-llmock-dummy")
+client = OpenAI(base_url="http://localhost:8080/openai/v1", api_key="sk-llmock-dummy")
 print(client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "what's the weather?"}],
@@ -155,25 +150,22 @@ otherwise it's an exponential pause, sized so the average gap stays
 At `0` it falls back to even pacing with `jitter_ms` of uniform variation.
 Burstiness and jitter are disabled under `--deterministic` for reproducible runs.
 
-Streaming has realistic defaults, so it feels like a real model out of the box.
-They are derived from measurements of real APIs, where time-to-first-token
-dominates and per-token gaps are bursty. The defaults are per-model: the timing
-is keyed on the request's model, so gpt-4o, gpt-5 nano/mini, the o-series,
-claude, haiku, and gemini each get their own measured pace, with a generic
-fallback for unknown models. A stream then paces like the model it stands in for.
-Override per rule, or fleet-wide via `--default-ttft-ms`,
-`--default-inter-token-ms`, `--default-burstiness`, `--default-jitter-ms`, and
-`--default-chunk-by`; a flag you set applies to every model, and an unset flag
-resolves per-model. Set the delays to `0` for instant streaming in a fast test
-suite. (Recorded cassettes ignore these and replay their own real timing; see
-`--replay-speed`.)
+Streaming has realistic defaults, so it feels like a real model out of the box,
+derived from measurements of real APIs where time-to-first-token dominates and
+per-token gaps are bursty. The defaults are per-model, keyed on the request's
+model: gpt-4o, gpt-5 nano/mini, the o-series, claude, haiku, and gemini each get
+their own measured pace, with a generic fallback for unknown models. Override per
+rule, or fleet-wide via `--default-ttft-ms`, `--default-inter-token-ms`,
+`--default-burstiness`, `--default-jitter-ms`, and `--default-chunk-by`; a flag
+you set overrides every model, and unset flags resolve per-model. Set the delays
+to `0` for instant streaming in a fast test suite. (Recorded cassettes ignore
+these and replay their own real timing; see `--replay-speed`.)
 
 Non-streaming responses take the same total time. A provider generates the whole
-response server-side before it replies, so a non-streamed call is no faster than
-a streamed one; you just don't see the progress until it lands. llmock waits that
-equivalent total (time-to-first-token plus an inter-token gap before each later
-token) before returning the JSON, from the same per-model defaults and knobs, so
-the `0`-delay escape hatch makes it instant too.
+response server-side before replying, so a non-streamed call is no faster than a
+streamed one. llmock waits that equivalent total (time-to-first-token plus an
+inter-token gap per later token) before returning the JSON, from the same
+per-model defaults and knobs; the `0`-delay escape hatch makes it instant too.
 
 ### Error & failure injection
 
@@ -328,9 +320,9 @@ Every provider is served under its own `/{provider}` prefix.
 
 The same fixture rules drive every endpoint, so you author once and test
 whichever API (and provider) your app calls. Point each SDK's base URL at its
-provider prefix: OpenAI at `http://host:8080/openai/v1`, Anthropic at
-`http://host:8080/anthropic`, and Gemini (google-genai) at
-`http://host:8080/gemini` via `HttpOptions(base_url=…)`.
+provider prefix: OpenAI at `http://localhost:8080/openai/v1`, Anthropic at
+`http://localhost:8080/anthropic`, and Gemini (google-genai) at
+`http://localhost:8080/gemini` via `HttpOptions(base_url=…)`.
 
 ## Contributing
 
