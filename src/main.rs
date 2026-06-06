@@ -59,6 +59,15 @@ async fn main() {
         eprintln!("error: --record requires --cassette-dir");
         std::process::exit(1);
     }
+    if Config::record_warns_on_public_bind(config.record, config.host, config.record_allow_remote) {
+        tracing::warn!(
+            "record mode on a non-loopback bind ({}) is unauthenticated API-key \
+             spending: any client that can reach this address can drive your real \
+             provider key. Restrict access, or bind loopback (--host 127.0.0.1). \
+             Pass --record-allow-remote to silence this warning.",
+            config.host
+        );
+    }
     let mut state = AppState::new(fixtures, stream_defaults);
     if let Some(dir) = &config.cassette_dir {
         let store = exit_on_error(Cassettes::load(dir));

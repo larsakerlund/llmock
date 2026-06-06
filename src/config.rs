@@ -70,6 +70,14 @@ pub(crate) struct Config {
     #[arg(long, env = "LLMOCK_RECORD", default_value_t = false)]
     pub record: bool,
 
+    /// Silence the warning about record mode on a non-loopback bind. Record mode
+    /// forwards your real provider API key to the upstream and is itself
+    /// unauthenticated, so a public bind is unauthenticated key-spending and
+    /// warns by default. Pass this when the bind is deliberately reachable and
+    /// protected by other means.
+    #[arg(long, env = "LLMOCK_RECORD_ALLOW_REMOTE", default_value_t = false)]
+    pub record_allow_remote: bool,
+
     /// Override the upstream base URL for all providers in record mode (default:
     /// each provider's real API, chosen by request path). A per-provider
     /// override below takes precedence over this.
@@ -114,5 +122,80 @@ impl Config {
             burstiness: self.default_burstiness,
             chunk_by,
         })
+    }
+
+    /// True when record mode should warn: recording onto a bind that is not
+    /// loopback, without the explicit remote opt-in. Record mode forwards the
+    /// real provider key upstream and is unauthenticated, so a public bind is
+    /// unauthenticated key-spending. `IpAddr::is_loopback` covers 127.0.0.0/8 and
+    /// `::1`; the wildcard (`0.0.0.0` / `::`) is not loopback, so it warns, which
+    /// matters because the container binds the wildcard. Pure so it is
+    /// unit-tested without binding a socket.
+    pub(crate) fn record_warns_on_public_bind(
+        record: bool,
+        host: std::net::IpAddr,
+        allow_remote: bool,
+    ) -> bool {
+        record && !allow_remote && !host.is_loopback()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use std::net::IpAddr;
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().expect("valid IP literal")
+    }
+
+    #[test]
+    fn loopback_v4_does_not_warn() {
+        assert!(!Config::record_warns_on_public_bind(
+            true,
+            ip("127.0.0.1"),
+            false
+        ));
+    }
+
+    #[test]
+    fn loopback_v6_does_not_warn() {
+        assert!(!Config::record_warns_on_public_bind(true, ip("::1"), false));
+    }
+
+    #[test]
+    fn wildcard_warns() {
+        assert!(Config::record_warns_on_public_bind(
+            true,
+            ip("0.0.0.0"),
+            false
+        ));
+    }
+
+    #[test]
+    fn lan_address_warns() {
+        assert!(Config::record_warns_on_public_bind(
+            true,
+            ip("192.168.1.10"),
+            false
+        ));
+    }
+
+    #[test]
+    fn allow_remote_silences_public_bind() {
+        assert!(!Config::record_warns_on_public_bind(
+            true,
+            ip("192.168.1.10"),
+            true
+        ));
+    }
+
+    #[test]
+    fn not_recording_never_warns() {
+        assert!(!Config::record_warns_on_public_bind(
+            false,
+            ip("0.0.0.0"),
+            false
+        ));
     }
 }
