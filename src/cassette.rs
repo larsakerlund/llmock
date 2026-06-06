@@ -317,10 +317,22 @@ pub(crate) async fn record(
             frames,
         }
     } else {
-        let bytes = upstream.bytes().await.unwrap_or_default();
+        // Abort rather than save a cassette from a partial read: a swallowed body
+        // error would persist an empty body under a healthy status and replay it
+        // forever. Mirror the send-error handling above.
+        let bytes = match upstream.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("record: error reading upstream body from {url}: {e}");
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    format!("llmock record: upstream body read failed: {e}"),
+                )
+                    .into_response();
+            }
+        };
         // The whole call's latency: the provider generated the response server-side
-        // before replying. Replayed before the body so a non-streamed cassette is
-        // as slow as the real call was.
+        // before replying. Recorded so a later replay is as slow as the real call.
         let delay_ms = u64::try_from(request_start.elapsed().as_millis()).unwrap_or(0);
         StoredResponse {
             status,
@@ -342,8 +354,12 @@ pub(crate) async fn record(
         Err(e) => tracing::error!("record: could not save cassette: {e}"),
     }
 
-    // Serve the just-captured response back at its real timing.
-    response.into_response(1.0).await
+    // Serve the just-captured response. The upstream call already waited the real
+    // latency live, so replay a non-streaming body immediately rather than
+    // sleeping delay_ms again (which would double it); streaming re-paces its
+    // frames as before. The recorded delay applies on later replay.
+    let serve_speed = if response.frames.is_empty() { 0.0 } else { 1.0 };
+    response.into_response(serve_speed).await
 }
 
 #[cfg(test)]

@@ -73,6 +73,14 @@ async fn spawn_upstream(body: &'static str) -> String {
     serve(app).await
 }
 
+async fn spawn_slow_upstream(body: &'static str, delay: Duration) -> String {
+    let app = Router::new().fallback(any(move || async move {
+        tokio::time::sleep(delay).await;
+        ([(header::CONTENT_TYPE, "application/json")], body)
+    }));
+    serve(app).await
+}
+
 async fn spawn_sse_upstream(chunks: &'static [&'static str], gap: Duration) -> String {
     let app = Router::new().fallback(any(move || async move {
         let body = Body::from_stream(async_stream::stream! {
@@ -255,5 +263,37 @@ async fn record_streaming_captures_timed_frames_and_replays() {
     assert!(
         start.elapsed() < Duration::from_millis(30),
         "speed 0 should skip the recorded delays"
+    );
+}
+
+#[tokio::test]
+async fn record_non_stream_captures_latency_without_doubling_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let upstream = spawn_slow_upstream("{\"recorded\":true}", Duration::from_millis(200)).await;
+
+    let start = std::time::Instant::now();
+    let (status, _ct, body) = post(
+        app_with(dir.path(), Some(record_to(dir.path(), &upstream))),
+        "/openai/v1/chat/completions",
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"slow one"}]}"#,
+    )
+    .await;
+    let elapsed = start.elapsed();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "{\"recorded\":true}");
+
+    // The captured latency reflects the real upstream wait.
+    let cassette = load_cassette(&find_cassette_file(dir.path()));
+    assert!(
+        cassette.response.delay_ms >= 150,
+        "delay_ms = {}",
+        cassette.response.delay_ms
+    );
+
+    // Record already waited the real latency live; serving the body must not sleep
+    // delay_ms again. One ~200ms wait, not two.
+    assert!(
+        elapsed < Duration::from_millis(380),
+        "record served in {elapsed:?}; non-streaming latency was applied twice"
     );
 }
