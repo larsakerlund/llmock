@@ -55,6 +55,7 @@ async fn messages(State(state): State<AppState>, req: Request) -> Result<Respons
             if neutral.stream {
                 Ok(sse::stream_response(&resp))
             } else {
+                crate::stream::sleep_response_delay(&resp).await;
                 let id = util::anthropic_message_id();
                 let tool_ids = tool_use_ids(&resp);
                 Ok(Json(message_object(&resp, &id, &tool_ids)).into_response())

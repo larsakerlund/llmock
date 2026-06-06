@@ -168,6 +168,13 @@ resolves per-model. Set the delays to `0` for instant streaming in a fast test
 suite. (Recorded cassettes ignore these and replay their own real timing; see
 `--replay-speed`.)
 
+Non-streaming responses take the same total time. A provider generates the whole
+response server-side before it replies, so a non-streamed call is no faster than
+a streamed one; you just don't see the progress until it lands. llmock waits that
+equivalent total (time-to-first-token plus an inter-token gap per token) before
+returning the JSON, from the same per-model defaults and knobs, so the `0`-delay
+escape hatch makes it instant too.
+
 ### Error & failure injection
 
 Fixtures are developer-owned, so you compose exactly the failure scenarios you
@@ -297,6 +304,11 @@ events into one read), so TTFT and total duration are faithful while per-token
 cadence is approximate. `--replay-speed` scales it: `1.0` is real time, `2.0` is
 twice as fast, `0.5` is half speed, and `0` is instant (handy for fast test
 suites).
+
+Non-streaming cassettes record their latency too: the request-to-full-response
+time is saved as `delay_ms` and replayed before the body (also scaled by
+`--replay-speed`), so a replayed non-streamed call is as slow as the real one
+was. Cassettes recorded before this carry no `delay_ms` and replay instantly.
 
 Misses fall through to the fixture engine, so cassettes and fixtures compose. A
 common pattern is to record the happy paths and hand-author the errors and edge

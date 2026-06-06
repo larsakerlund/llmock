@@ -5,8 +5,9 @@
 use std::time::Duration;
 
 use rand::Rng;
+use tokio::time::sleep;
 
-use crate::core::{ChunkBy, StreamSpec};
+use crate::core::{ChunkBy, NeutralResponse, StreamSpec};
 use crate::util;
 
 /// Split `content` into the ordered pieces that will become individual deltas.
@@ -91,6 +92,37 @@ pub(crate) fn inter_token_delay(spec: &StreamSpec) -> Option<Duration> {
     }
 }
 
+/// The wall-clock a non-streamed response should take: the same as the streamed
+/// equivalent, because a provider still generates every token server-side before
+/// it replies. It is the time-to-first-token plus one inter-token gap before each
+/// later delta the stream would emit (content pieces, and each tool call's
+/// opening delta plus its argument fragments). Burstiness and jitter are
+/// mean-preserving and invisible without streaming, so the total uses the base
+/// gaps; `0` gaps mean no delay (instant, for fast suites).
+pub(crate) fn response_delay(resp: &NeutralResponse) -> Option<Duration> {
+    let spec = resp.stream;
+    let mut deltas = chunk_text(&resp.content, spec.chunk_by).len();
+    for tc in &resp.tool_calls {
+        deltas += 1 + chunk_text(&tc.arguments, spec.chunk_by).len();
+    }
+    let deltas = deltas as u64;
+    if deltas == 0 {
+        return None;
+    }
+    delay(
+        spec.ttft_ms
+            .saturating_add((deltas - 1).saturating_mul(spec.inter_token_ms)),
+    )
+}
+
+/// Sleep [`response_delay`] before a non-streaming handler returns its body, so a
+/// non-streamed call is no faster than the streamed one would be.
+pub(crate) async fn sleep_response_delay(resp: &NeutralResponse) {
+    if let Some(d) = response_delay(resp) {
+        sleep(d).await;
+    }
+}
+
 /// Mean-preserving burst mixture: with probability `b` the gap is 0; otherwise
 /// it's an exponential draw with mean `base / (1 - b)`. The average stays
 /// `base`, but most tokens fire instantly and the rest pause — matching the
@@ -153,5 +185,45 @@ mod tests {
     fn fixed_runs() {
         let p = chunk_text("abcde", ChunkBy::Chars(2));
         assert_eq!(p, vec!["ab", "cd", "e"]);
+    }
+
+    #[test]
+    fn non_stream_delay_is_the_stream_total() {
+        use crate::core::{StopReason, ToolCall, Usage};
+        let mk =
+            |content: &str, tool_calls: Vec<ToolCall>, ttft: u64, inter: u64| NeutralResponse {
+                model: "gpt-4o".into(),
+                content: content.into(),
+                tool_calls,
+                stop_reason: StopReason::Stop,
+                usage: Usage::default(),
+                stream: StreamSpec {
+                    ttft_ms: ttft,
+                    inter_token_ms: inter,
+                    jitter_ms: 0,
+                    burstiness: 0.0,
+                    chunk_by: ChunkBy::Word,
+                },
+                fault: None,
+            };
+        // "one two three" -> 3 word pieces: ttft + (3-1) * inter.
+        assert_eq!(
+            response_delay(&mk("one two three", vec![], 100, 10)),
+            Some(Duration::from_millis(120))
+        );
+        // Zero gaps -> instant.
+        assert_eq!(response_delay(&mk("one two three", vec![], 0, 0)), None);
+        // Nothing to emit -> instant.
+        assert_eq!(response_delay(&mk("", vec![], 100, 10)), None);
+        // A tool call: one opening delta + its argument pieces ("a b" -> 2).
+        let tc = ToolCall {
+            id: "call_1".into(),
+            name: "f".into(),
+            arguments: "a b".into(),
+        };
+        assert_eq!(
+            response_delay(&mk("", vec![tc], 100, 10)),
+            Some(Duration::from_millis(120))
+        );
     }
 }

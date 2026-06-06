@@ -37,7 +37,7 @@ pub(crate) async fn resolve(
 ) -> Resolution {
     // 1. A matching cassette replays — same Match as fixtures, endpoint-scoped.
     if let Some(stored) = state.cassettes.find(endpoint, req) {
-        return Resolution::Raw(stored.clone().into_response(state.replay_speed));
+        return Resolution::Raw(stored.clone().into_response(state.replay_speed).await);
     }
     // 2. Record mode proxies the miss to the real upstream and captures it.
     if let Some(rec) = &state.record {

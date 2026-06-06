@@ -52,6 +52,7 @@ async fn chat_completions(
             if neutral.stream {
                 Ok(sse::stream_response(&resp, neutral.include_usage))
             } else {
+                crate::stream::sleep_response_delay(&resp).await;
                 Ok(Json(ChatCompletion::from_neutral(&resp)).into_response())
             }
         }

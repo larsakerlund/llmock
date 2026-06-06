@@ -75,8 +75,19 @@ pub(crate) struct StoredResponse {
     pub content_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    /// Non-streaming response latency (request to full body), replayed before the
+    /// body so a non-streamed cassette takes as long as the real call did. A
+    /// provider generates the whole response server-side before replying, so this
+    /// is the equivalent of a stream's total time.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub delay_ms: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub frames: Vec<Frame>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde skip_serializing_if needs &T
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// One captured streamed chunk: its bytes and the delay since the previous one.
@@ -88,12 +99,18 @@ pub(crate) struct Frame {
 }
 
 impl StoredResponse {
-    /// Build the HTTP response. For streaming, each recorded inter-chunk delay is
-    /// divided by `speed`: `1.0` reproduces the real timing, `2.0` is twice as
-    /// fast, `0.5` half speed, and `0` (or less) replays instantly.
-    pub(crate) fn into_response(self, speed: f64) -> Response {
+    /// Build the HTTP response. Recorded delays are divided by `speed`: `1.0`
+    /// reproduces the real timing, `2.0` is twice as fast, `0.5` half speed, and
+    /// `0` (or less) replays instantly. For streaming that scales each inter-chunk
+    /// delay; for non-streaming it scales the single request-to-body latency,
+    /// slept before the body so a replay is as slow as the real call.
+    pub(crate) async fn into_response(self, speed: f64) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         if self.frames.is_empty() {
+            let ms = scale_delay(self.delay_ms, speed);
+            if ms > 0 {
+                sleep(Duration::from_millis(ms)).await;
+            }
             let body = self.body.unwrap_or_default();
             return (status, [(header::CONTENT_TYPE, self.content_type)], body).into_response();
         }
@@ -296,14 +313,20 @@ pub(crate) async fn record(
             status,
             content_type,
             body: None,
+            delay_ms: 0,
             frames,
         }
     } else {
         let bytes = upstream.bytes().await.unwrap_or_default();
+        // The whole call's latency: the provider generated the response server-side
+        // before replying. Replayed before the body so a non-streamed cassette is
+        // as slow as the real call was.
+        let delay_ms = u64::try_from(request_start.elapsed().as_millis()).unwrap_or(0);
         StoredResponse {
             status,
             content_type,
             body: Some(String::from_utf8_lossy(&bytes).into_owned()),
+            delay_ms,
             frames: Vec::new(),
         }
     };
@@ -320,7 +343,7 @@ pub(crate) async fn record(
     }
 
     // Serve the just-captured response back at its real timing.
-    response.into_response(1.0)
+    response.into_response(1.0).await
 }
 
 #[cfg(test)]
@@ -352,6 +375,7 @@ mod tests {
                 status: 200,
                 content_type: "application/json".to_string(),
                 body: Some(r#"{"ok":true}"#.to_string()),
+                delay_ms: 0,
                 frames: Vec::new(),
             },
         }
@@ -380,6 +404,42 @@ mod tests {
             .expect("cassette should match");
         assert_eq!(stored.status, 200);
         assert_eq!(stored.body.as_deref(), Some(r#"{"ok":true}"#));
+    }
+
+    #[test]
+    fn non_stream_delay_serdes_and_defaults_to_zero() {
+        // delay_ms survives a round-trip.
+        let mut c = cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather");
+        c.response.delay_ms = 1234;
+        let json = serde_json::to_string(&c).unwrap();
+        assert!(json.contains("\"delay_ms\":1234"));
+        let back: Cassette = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.response.delay_ms, 1234);
+
+        // A cassette recorded before this field loads as 0 (instant).
+        let legacy = r#"{"endpoint":"openai.chat","stream":false,
+            "match":{"model":"gpt-4o"},
+            "response":{"status":200,"content_type":"application/json","body":"{}"}}"#;
+        let legacy: Cassette = serde_json::from_str(legacy).unwrap();
+        assert_eq!(legacy.response.delay_ms, 0);
+    }
+
+    #[tokio::test]
+    async fn non_stream_replay_waits_then_speed_zero_skips() {
+        let mut c = cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather");
+        c.response.delay_ms = 40;
+
+        // At real speed it waits roughly the recorded latency (lower bound only,
+        // to stay robust under scheduling jitter).
+        let start = Instant::now();
+        let resp = c.response.clone().into_response(1.0).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(start.elapsed() >= Duration::from_millis(30));
+
+        // replay-speed 0 replays instantly despite the recorded latency.
+        let start = Instant::now();
+        let _ = c.response.clone().into_response(0.0).await;
+        assert!(start.elapsed() < Duration::from_millis(30));
     }
 
     #[test]

@@ -53,6 +53,7 @@ async fn responses(State(state): State<AppState>, req: Request) -> Result<Respon
             if neutral.stream {
                 Ok(sse::stream_response(&resp))
             } else {
+                crate::stream::sleep_response_delay(&resp).await;
                 let ids = ResponseIds::for_response(&resp);
                 let object = completed_response(&resp, &ids, util::unix_now());
                 Ok(Json(object).into_response())

@@ -75,6 +75,7 @@ async fn generate(
             if neutral.stream {
                 Ok(sse::stream_response(&resp))
             } else {
+                crate::stream::sleep_response_delay(&resp).await;
                 Ok(Json(generate_response(&resp)).into_response())
             }
         }
