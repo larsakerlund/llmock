@@ -42,6 +42,12 @@ fn openai_encoding(model: &str) -> &'static CoreBPE {
     }
 }
 
+/// tiktoken BPE is roughly linear but heavy; above ~1M input chars fall back to
+/// the cheap chars/4 estimate. The request body cap (`--max-body-bytes`) is the
+/// primary bound on input size; this is a second-order guard so a single
+/// max-body request cannot pin a CPU running BPE.
+const TIKTOKEN_CHAR_LIMIT: usize = 1_000_000;
+
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn estimate_usage(
     model: &str,
@@ -51,7 +57,16 @@ pub(crate) fn estimate_usage(
 ) -> Usage {
     // Normalize the model name once; both helpers expect lowercase.
     let lower = model.to_ascii_lowercase();
-    if is_openai(&lower) {
+    let total_chars: usize = messages
+        .iter()
+        .map(|m| m.role.chars().count() + m.content.chars().count())
+        .sum::<usize>()
+        + completion.chars().count()
+        + tool_calls
+            .iter()
+            .map(|t| t.name.chars().count() + t.arguments.chars().count())
+            .sum::<usize>();
+    if is_openai(&lower) && total_chars <= TIKTOKEN_CHAR_LIMIT {
         let enc = openai_encoding(&lower);
         // Chat-format accounting: 3 tokens per message + role + content, plus 3
         // tokens priming the assistant reply (matches num_tokens_from_messages).
@@ -89,4 +104,26 @@ pub(crate) fn estimate_usage(
 
 fn count(enc: &CoreBPE, text: &str) -> usize {
     enc.encode_ordinary(text).len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An OpenAI-model input above the tiktoken char limit must skip BPE and use
+    /// the chars/4 fallback, still returning a sane non-zero estimate. This proves
+    /// the short-circuit engages without running BPE over a huge string.
+    #[test]
+    fn huge_openai_input_uses_chars4_fallback_without_panicking() {
+        let big = "a".repeat(TIKTOKEN_CHAR_LIMIT + 1);
+        let messages = [Message {
+            role: "user".to_string(),
+            content: big.clone(),
+        }];
+        let usage = estimate_usage("gpt-4o", &messages, "", &[]);
+        // Fallback: 3 + (4 + content_chars/4) for the single message.
+        let expected_prompt = 3 + 4 + big.chars().count() / 4;
+        assert_eq!(usage.prompt_tokens, u32::try_from(expected_prompt).unwrap());
+        assert_eq!(usage.completion_tokens, 0);
+    }
 }
