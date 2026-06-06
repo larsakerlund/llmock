@@ -17,7 +17,7 @@ env:
 
 jobs:
   lint-and-test:
-    name: fmt, clippy, test
+    name: lint and test
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,13 +31,13 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: rustfmt
         run: cargo fmt --all --check
-      - name: clippy (deny warnings)
+      - name: clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: test
         run: cargo test --all-targets
 
   docs:
-    name: doc (deny warnings)
+    name: docs
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -53,7 +53,7 @@ jobs:
         run: cargo doc --no-deps
 
   cargo-deny:
-    name: supply-chain (advisories, licenses, bans, sources)
+    name: cargo deny
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -65,7 +65,7 @@ jobs:
           command: check
 
   workflow-lint:
-    name: actionlint + zizmor
+    name: lint workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -83,7 +83,7 @@ jobs:
         run: uvx zizmor@1.23.1 --color=always .github/workflows/
 
   sdk-e2e:
-    name: real-SDK e2e (OpenAI, Anthropic, Gemini)
+    name: sdk e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -103,7 +103,7 @@ jobs:
         run: ./e2e/sdk_compat/run.sh
 
   docker-build:
-    name: docker image builds
+    name: build image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
