@@ -25,14 +25,15 @@ cargo run -- --fixtures fixtures/example.yaml
 
 ## The gate
 
-Install [pre-commit](https://pre-commit.com) once; it runs the same checks CI
-does, so a clean commit stays a clean CI run:
+Install [pre-commit](https://pre-commit.com) once:
 
 ```sh
 pre-commit install
 ```
 
-`cargo fmt` and `cargo clippy` run on commit, `cargo test` on push.
+It runs `cargo fmt` and `cargo clippy` on commit and `cargo test` on push (the
+same checks CI enforces), checks your commit message against
+[Conventional Commits](#commit-messages), and runs a few file sanity checks.
 
 Linting is strict: `clippy::all` and `clippy::pedantic` are denied via `[lints]`
 in `Cargo.toml`, with a small documented allow-list. Treat a new warning as a
