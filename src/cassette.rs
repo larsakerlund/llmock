@@ -207,8 +207,31 @@ fn save(dir: &Path, cassette: &Cassette) -> Result<PathBuf, String> {
 #[derive(Debug, Clone)]
 pub(crate) struct RecordConfig {
     pub dir: PathBuf,
-    /// Override the upstream base URL (default: the endpoint's real provider).
+    /// All-providers override of the upstream base URL.
     pub upstream: Option<String>,
+    /// Per-provider overrides, each taking precedence over `upstream`. OpenAI
+    /// covers both the chat and responses endpoints.
+    pub upstream_openai: Option<String>,
+    pub upstream_anthropic: Option<String>,
+    pub upstream_gemini: Option<String>,
+}
+
+impl RecordConfig {
+    /// The upstream base for an endpoint: its per-provider override, else the
+    /// all-providers `upstream`, else the provider's real default. Lets one
+    /// recording run relocate providers independently (e.g. OpenAI to Azure
+    /// while Anthropic stays on its default).
+    fn base_for(&self, endpoint: Endpoint) -> &str {
+        let per_provider = match endpoint {
+            Endpoint::OpenAiChat | Endpoint::OpenAiResponses => &self.upstream_openai,
+            Endpoint::Anthropic => &self.upstream_anthropic,
+            Endpoint::Gemini => &self.upstream_gemini,
+        };
+        per_provider
+            .as_deref()
+            .or(self.upstream.as_deref())
+            .unwrap_or_else(|| endpoint.upstream_base())
+    }
 }
 
 /// Headers worth forwarding to the upstream (auth + content negotiation).
@@ -250,10 +273,7 @@ pub(crate) async fn record(
     raw_body: &Bytes,
     headers: &HeaderMap,
 ) -> Response {
-    let base = rec
-        .upstream
-        .as_deref()
-        .unwrap_or_else(|| endpoint.upstream_base());
+    let base = rec.base_for(endpoint);
     let url = if query.is_empty() {
         format!("{base}{path}")
     } else {
@@ -395,6 +415,83 @@ mod tests {
                 frames: Vec::new(),
             },
         }
+    }
+
+    fn record_cfg(
+        upstream: Option<&str>,
+        openai: Option<&str>,
+        anthropic: Option<&str>,
+        gemini: Option<&str>,
+    ) -> RecordConfig {
+        RecordConfig {
+            dir: PathBuf::new(),
+            upstream: upstream.map(str::to_string),
+            upstream_openai: openai.map(str::to_string),
+            upstream_anthropic: anthropic.map(str::to_string),
+            upstream_gemini: gemini.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn base_for_falls_back_to_provider_default() {
+        let rec = record_cfg(None, None, None, None);
+        assert_eq!(rec.base_for(Endpoint::OpenAiChat), "https://api.openai.com");
+        assert_eq!(
+            rec.base_for(Endpoint::Anthropic),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            rec.base_for(Endpoint::Gemini),
+            "https://generativelanguage.googleapis.com"
+        );
+    }
+
+    #[test]
+    fn base_for_per_provider_needs_no_global() {
+        // A per-provider override applies even with no global --upstream; the
+        // others fall through to their real defaults.
+        let rec = record_cfg(None, Some("https://only-openai.example"), None, None);
+        assert_eq!(
+            rec.base_for(Endpoint::OpenAiChat),
+            "https://only-openai.example"
+        );
+        assert_eq!(
+            rec.base_for(Endpoint::Anthropic),
+            "https://api.anthropic.com"
+        );
+    }
+
+    #[test]
+    fn base_for_global_upstream_applies_to_all() {
+        let rec = record_cfg(Some("https://gw.example"), None, None, None);
+        assert_eq!(rec.base_for(Endpoint::OpenAiChat), "https://gw.example");
+        assert_eq!(rec.base_for(Endpoint::Anthropic), "https://gw.example");
+        assert_eq!(rec.base_for(Endpoint::Gemini), "https://gw.example");
+    }
+
+    #[test]
+    fn base_for_per_provider_overrides_global_and_default() {
+        // OpenAI relocated to Azure, Anthropic to its own gateway, Gemini left
+        // on the global fallback. Both OpenAI endpoints follow the OpenAI override.
+        let rec = record_cfg(
+            Some("https://fallback.example"),
+            Some("https://acme.openai.azure.com/openai"),
+            Some("https://anthropic.gw.example"),
+            None,
+        );
+        assert_eq!(
+            rec.base_for(Endpoint::OpenAiChat),
+            "https://acme.openai.azure.com/openai"
+        );
+        assert_eq!(
+            rec.base_for(Endpoint::OpenAiResponses),
+            "https://acme.openai.azure.com/openai"
+        );
+        assert_eq!(
+            rec.base_for(Endpoint::Anthropic),
+            "https://anthropic.gw.example"
+        );
+        assert_eq!(rec.base_for(Endpoint::Gemini), "https://fallback.example");
     }
 
     #[test]

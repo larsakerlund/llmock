@@ -70,10 +70,26 @@ pub(crate) struct Config {
     #[arg(long, env = "LLMOCK_RECORD", default_value_t = false)]
     pub record: bool,
 
-    /// Override the upstream base URL used in record mode (default: the real
-    /// provider, chosen by request path). Mainly for testing.
+    /// Override the upstream base URL for all providers in record mode (default:
+    /// each provider's real API, chosen by request path). A per-provider
+    /// override below takes precedence over this.
     #[arg(long, env = "LLMOCK_UPSTREAM")]
     pub upstream: Option<String>,
+
+    /// Override the upstream base URL for OpenAI requests (chat and responses),
+    /// e.g. an Azure OpenAI resource. Takes precedence over --upstream.
+    #[arg(long, env = "LLMOCK_UPSTREAM_OPENAI")]
+    pub upstream_openai: Option<String>,
+
+    /// Override the upstream base URL for Anthropic requests. Takes precedence
+    /// over --upstream.
+    #[arg(long, env = "LLMOCK_UPSTREAM_ANTHROPIC")]
+    pub upstream_anthropic: Option<String>,
+
+    /// Override the upstream base URL for Gemini requests. Takes precedence over
+    /// --upstream.
+    #[arg(long, env = "LLMOCK_UPSTREAM_GEMINI")]
+    pub upstream_gemini: Option<String>,
 
     /// Speed factor applied to a streamed cassette's recorded timing on replay:
     /// `1.0` reproduces the real timing, `2.0` is twice as fast, `0.5` half

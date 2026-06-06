@@ -241,7 +241,7 @@ fixtures. Replay is byte-for-byte exact.
    | Provider | SDK base URL | Auth header forwarded |
    |----------|--------------|-----------------------|
    | OpenAI | `http://localhost:8080/openai/v1` | `Authorization: Bearer` |
-   | Azure OpenAI | `http://localhost:8080/openai/v1` + `--upstream https://<resource>.openai.azure.com/openai` | `api-key` (or `Authorization`) |
+   | Azure OpenAI | `http://localhost:8080/openai/v1` + `--upstream-openai https://<resource>.openai.azure.com/openai` | `api-key` (or `Authorization`) |
    | Anthropic | `http://localhost:8080/anthropic` | `x-api-key` |
    | Gemini (`google-genai`) | `http://localhost:8080/gemini` via `HttpOptions(base_url=…)` | `x-goog-api-key` |
 
@@ -257,8 +257,12 @@ fixtures. Replay is byte-for-byte exact.
    Now there is no key and no network, and replays are byte-for-byte the real
    responses.
 
-`--upstream` overrides the real provider. Point it at a proxy, a gateway, or (for
-Azure) your resource, so that `<upstream>/v1/chat/completions` is the real URL.
+`--upstream` overrides the real provider for every endpoint. Point it at a proxy,
+a gateway, or (for Azure) your resource, so that `<upstream>/v1/chat/completions`
+is the real URL. To relocate providers independently in one run, use the
+per-provider flags, which take precedence over `--upstream`: `--upstream-openai`
+(covers Chat and Responses, e.g. an Azure resource), `--upstream-anthropic`, and
+`--upstream-gemini`.
 
 A cassette matches on `model` plus the last user message (the fixture `Match`),
 scoped to its `endpoint` and streaming mode. You record a few real responses and

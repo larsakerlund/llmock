@@ -71,6 +71,9 @@ async fn main() {
         let record = config.record.then(|| RecordConfig {
             dir: dir.clone(),
             upstream: config.upstream.clone(),
+            upstream_openai: config.upstream_openai.clone(),
+            upstream_anthropic: config.upstream_anthropic.clone(),
+            upstream_gemini: config.upstream_gemini.clone(),
         });
         state = state.with_cassettes(store, record, config.replay_speed);
     }

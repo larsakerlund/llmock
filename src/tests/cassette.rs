@@ -101,6 +101,9 @@ fn record_to(dir: &Path, upstream: &str) -> RecordConfig {
     RecordConfig {
         dir: dir.to_path_buf(),
         upstream: Some(upstream.to_string()),
+        upstream_openai: None,
+        upstream_anthropic: None,
+        upstream_gemini: None,
     }
 }
 
@@ -200,6 +203,41 @@ async fn record_proxies_saves_with_derived_match_then_replays() {
     )
     .await;
     assert_eq!(body, "{\"recorded\":true}");
+}
+
+#[tokio::test]
+async fn record_honors_per_provider_upstream_over_global() {
+    // Anthropic is relocated to its own upstream while OpenAI has no per-provider
+    // override and falls back to the global one. Proves the router maps each path
+    // to the right endpoint and that `record` consults the per-provider base, not
+    // just the global one — i.e. providers relocate independently in one run.
+    let dir = tempfile::tempdir().unwrap();
+    let anthropic_up = spawn_upstream("{\"from\":\"anthropic-upstream\"}").await;
+    let global_up = spawn_upstream("{\"from\":\"global-upstream\"}").await;
+    let record = RecordConfig {
+        dir: dir.path().to_path_buf(),
+        upstream: Some(global_up),
+        upstream_openai: None,
+        upstream_anthropic: Some(anthropic_up),
+        upstream_gemini: None,
+    };
+
+    let (status, _, body) = post(
+        app_with(dir.path(), Some(record.clone())),
+        "/anthropic/v1/messages",
+        r#"{"model":"claude-3-5-sonnet","max_tokens":16,"messages":[{"role":"user","content":"record me"}]}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "{\"from\":\"anthropic-upstream\"}");
+
+    let (_, _, body) = post(
+        app_with(dir.path(), Some(record)),
+        "/openai/v1/chat/completions",
+        r#"{"model":"gpt-4o","messages":[{"role":"user","content":"record me too"}]}"#,
+    )
+    .await;
+    assert_eq!(body, "{\"from\":\"global-upstream\"}");
 }
 
 #[tokio::test]
