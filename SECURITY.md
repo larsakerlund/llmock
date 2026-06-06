@@ -2,10 +2,11 @@
 
 ## Reporting a vulnerability
 
-Report security issues privately through GitHub. Open the repository's Security
-tab and choose "Report a vulnerability" to file a private advisory. This keeps
-the report confidential until a fix is released. Please do not open a public
-issue for a security problem.
+Report security issues privately through GitHub's private vulnerability
+reporting at https://github.com/larsakerlund/llmock/security/advisories/new (or
+the repository's Security tab, then "Report a vulnerability"). This keeps the
+report confidential until a fix is released. Please do not open a public issue
+for a security problem.
 
 Include enough detail to reproduce: the version or commit, the configuration
 (flags and environment), and the steps that trigger the issue.
