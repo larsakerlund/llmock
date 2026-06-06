@@ -1,0 +1,37 @@
+name: pr-title
+
+# Enforce Conventional Commits on pull request titles, matching the commit
+# convention in AGENTS.md. release tooling and the changelog read commit
+# subjects, and a PR title that does not parse tends to become a bad squash or
+# merge subject. The type is required; the subject's case is left free so proper
+# nouns and acronyms (GHCR, OCI, MSRV) keep their capitals.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: check the title is a conventional commit
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The allowed types from AGENTS.md. A scope is optional (the project
+          # uses none), and the subject case is unconstrained on purpose.
+          types: |
+            feat
+            fix
+            docs
+            test
+            refactor
+            perf
+            deps
+            build
+            ci
+            chore
