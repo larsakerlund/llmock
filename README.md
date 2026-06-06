@@ -1,9 +1,11 @@
 # llmock
 
 [![CI](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml/badge.svg)](https://github.com/larsakerlund/llmock/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/larsakerlund/llmock?sort=semver)](https://github.com/larsakerlund/llmock/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.96+-orange.svg)](rust-toolchain.toml)
 [![Container](https://img.shields.io/badge/ghcr.io-larsakerlund%2Fllmock-2496ed?logo=docker&logoColor=white)](https://github.com/larsakerlund/llmock/pkgs/container/llmock)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/larsakerlund/llmock/badge)](https://scorecard.dev/viewer/?uri=github.com/larsakerlund/llmock)
 
 A fast emulator of LLM provider HTTP APIs, for testing your app without access
 to a real LLM. Point your SDK's `base_url` at llmock and it serves
