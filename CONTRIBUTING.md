@@ -25,14 +25,14 @@ cargo run -- --fixtures fixtures/example.yaml
 
 ## The gate
 
-Run all three before every commit. CI runs the same and treats warnings as
-errors:
+Install [pre-commit](https://pre-commit.com) once; it runs the same checks CI
+does, so a clean commit stays a clean CI run:
 
 ```sh
-cargo fmt
-cargo clippy --all-targets
-cargo test
+pre-commit install
 ```
+
+`cargo fmt` and `cargo clippy` run on commit, `cargo test` on push.
 
 Linting is strict: `clippy::all` and `clippy::pedantic` are denied via `[lints]`
 in `Cargo.toml`, with a small documented allow-list. Treat a new warning as a
@@ -49,33 +49,6 @@ dependencies:
 cargo deny check
 ```
 
-## Manifest
-
-Keep the `[package]` table in `Cargo.toml` complete and current:
-`description`, `license`, `repository`, `readme`, `keywords`, `categories`, and
-`rust-version`. The MSRV (`rust-version = "1.96"`) tracks
-[`rust-toolchain.toml`](rust-toolchain.toml), which stays the single source for
-the toolchain channel; bump both together.
-
-## Fidelity is verified by the real SDKs
-
-The correctness gate is driving llmock with the genuine provider SDKs: if the
-real SDK parses our bytes into the expected objects, the protocol is faithful.
-Run the suites end to end:
-
-```sh
-./e2e/sdk_compat/run.sh
-```
-
-The only prerequisite is [uv](https://docs.astral.sh/uv/): it provisions the
-Python interpreter and the provider SDKs from the pinned
-`e2e/sdk_compat/uv.lock`, so the suite needs no preinstalled Python or manual
-venv. The first run downloads the SDKs from PyPI and caches them.
-
-Add SDK-compat coverage for every new adapter and capability (text, streaming,
-tool calls, usage, and error injection). Never land an adapter without its
-real-SDK end-to-end test.
-
 ## Test organization
 
 Tests live in three places, split by what they need to see:
@@ -88,8 +61,11 @@ Tests live in three places, split by what they need to see:
   `build_app`, so they sit in-crate rather than in a top-level `tests/`
   directory. The crate is binary-only and exposes no library API, so a real
   `tests/` integration dir would see nothing to call.
-- **The real-SDK end-to-end suite** lives in `e2e/` (`e2e/sdk_compat/`) and is
-  the fidelity gate, run via `./e2e/sdk_compat/run.sh`.
+- **The real-SDK end-to-end suite** lives in `e2e/sdk_compat/` and runs the
+  genuine provider SDKs against llmock with `./e2e/sdk_compat/run.sh` (only
+  [uv](https://docs.astral.sh/uv/) is required; it provisions Python and the SDKs
+  from the pinned lockfile). A new adapter or capability needs coverage here;
+  don't land one without it.
 
 ## Adding a provider
 
@@ -153,8 +129,7 @@ want to cut a release.
 
 1. Fork the repository and create a branch from `main`.
 2. Make your change with tests. A new adapter or capability needs its real-SDK
-   e2e coverage (see
-   [Fidelity is verified by the real SDKs](#fidelity-is-verified-by-the-real-sdks)).
+   e2e coverage (see [Test organization](#test-organization)).
 3. Run the gate locally and keep it green: `cargo fmt`, `cargo clippy
    --all-targets`, `cargo test`, and `cargo deny check`, plus
    `./e2e/sdk_compat/run.sh` when you touch an adapter.
