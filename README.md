@@ -237,10 +237,9 @@ fine-grained fragments).
 ## Record & replay (cassettes)
 
 For the highest fidelity, replay real captured responses instead of hand-written
-fixtures. Replay is byte-for-byte exact, so it is as faithful as you can get. A
-request that matches a cassette is replayed before fixtures are consulted.
+fixtures. Replay is byte-for-byte exact.
 
-### Record your own (step by step)
+### Record your own
 
 1. Start llmock in record mode, pointed at a directory for the cassettes:
    ```sh
@@ -270,12 +269,10 @@ request that matches a cassette is replayed before fixtures are consulted.
 `--upstream` overrides the real provider. Point it at a proxy, a gateway, or (for
 Azure) your resource, so that `<upstream>/v1/chat/completions` is the real URL.
 
-Cassettes are matched by the same engine as fixtures, so there is one matching
-model for everything. A cassette matches on `model` plus the last user message
-(the fixture `Match`), scoped to its `endpoint` and streaming mode. You record a
-few real responses and they replay whenever the prompt is close enough, rather
-than only on a pixel-perfect request. The recorded `match` is derived for you, and you can
-hand-edit it:
+A cassette matches on `model` plus the last user message (the fixture `Match`),
+scoped to its `endpoint` and streaming mode. You record a few real responses and
+they replay whenever the prompt is close enough. The recorded `match` is derived
+for you, and you can hand-edit it:
 
 ```json
 {
@@ -316,8 +313,7 @@ cases.
 
 ## Endpoints
 
-Every provider is served only under its own `/{provider}` prefix. There is no
-root fallback.
+Every provider is served under its own `/{provider}` prefix.
 
 | Method | Path | Notes |
 |--------|------|-------|
@@ -328,15 +324,13 @@ root fallback.
 | POST | `/gemini/v1beta/models/{model}:streamGenerateContent` | Google Gemini: streaming (`?alt=sse`); text and function calls. |
 | GET  | `/openai/v1/models` | Lists a default model catalogue. |
 | GET  | `/openai/v1/models/{id}` | Returns a model object for any id (lenient). |
-| GET  | `/healthz` | Liveness probe (not part of the emulated surface; stays at root). |
+| GET  | `/healthz` | Liveness probe. |
 
 The same fixture rules drive every endpoint, so you author once and test
 whichever API (and provider) your app calls. Point each SDK's base URL at its
 provider prefix: OpenAI at `http://host:8080/openai/v1`, Anthropic at
 `http://host:8080/anthropic`, and Gemini (google-genai) at
-`http://host:8080/gemini` via `HttpOptions(base_url=…)`. See
-[ARCHITECTURE.md](ARCHITECTURE.md#routing-is-prefix-only) for why routing is
-prefix-only.
+`http://host:8080/gemini` via `HttpOptions(base_url=…)`.
 
 ## Contributing
 
