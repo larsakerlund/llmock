@@ -118,9 +118,6 @@ Add SDK-compat coverage for **every** new adapter and capability (text,
 streaming, tool calls, usage, error injection). Never land an adapter without
 its real-SDK e2e test.
 
-See `README.md` for the fidelity scope (protocol vs byte-level vs model-specific
-behaviour).
-
 ## Docs writing style
 
 Project docs (`README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`) share one voice.

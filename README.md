@@ -5,8 +5,8 @@
 [![Rust](https://img.shields.io/badge/rust-1.96+-orange.svg)](rust-toolchain.toml)
 [![Container](https://img.shields.io/badge/ghcr.io-larsakerlund%2Fllmock-2496ed?logo=docker&logoColor=white)](https://github.com/larsakerlund/llmock/pkgs/container/llmock)
 
-A fast, byte-faithful emulator of LLM provider HTTP APIs, for testing your app
-without access to a real LLM. Point your SDK's `base_url` at llmock and it serves
+A fast emulator of LLM provider HTTP APIs, for testing your app without access
+to a real LLM. Point your SDK's `base_url` at llmock and it serves
 responses that look exactly like the real provider: the same JSON shapes, the
 same streaming wire format, and the same error envelopes. A single emulator
 covers whichever providers your app calls.
@@ -66,9 +66,12 @@ docker run --rm -p 8080:8080 \
   ghcr.io/larsakerlund/llmock:latest --fixtures /fixtures/example.yaml
 ```
 
-Every flag is also an environment variable (`LLMOCK_PORT`, `LLMOCK_FIXTURES`,
-`LLMOCK_DETERMINISTIC`, ...), so it drops into a compose stack alongside your
-app. A ready-to-edit [`docker-compose.yml`](docker-compose.yml) is included:
+Every flag is also an environment variable, so it drops into a compose stack
+alongside your app. Most map predictably (`LLMOCK_PORT`, `LLMOCK_FIXTURES`,
+`LLMOCK_DETERMINISTIC`); the latency flags drop the `default-` prefix in their
+environment form, so `--default-ttft-ms` is `LLMOCK_TTFT_MS`,
+`--default-inter-token-ms` is `LLMOCK_INTER_TOKEN_MS`, and likewise for the
+rest. A ready-to-edit [`docker-compose.yml`](docker-compose.yml) is included:
 
 ```yaml
 services:
@@ -83,6 +86,11 @@ services:
 ```
 
 Run `llmock --help` for the full list of flags and environment variables.
+
+llmock rejects request bodies larger than `--max-body-bytes` (default 32 MiB,
+env `LLMOCK_MAX_BODY_BYTES`) with the provider's own oversized-request error,
+matching what the real APIs do. Raise it if you send unusually large inline
+media, or lower it to harden a shared deployment.
 
 ### Build from source
 
@@ -263,6 +271,9 @@ is the real URL. To relocate providers independently in one run, use the
 per-provider flags, which take precedence over `--upstream`: `--upstream-openai`
 (covers Chat and Responses, e.g. an Azure resource), `--upstream-anthropic`, and
 `--upstream-gemini`.
+
+Record mode forwards your real API key upstream and is unauthenticated, so don't
+expose it on an untrusted network. Replay needs no key and no network.
 
 A cassette matches on `model` plus the last user message (the fixture `Match`),
 scoped to its `endpoint` and streaming mode. You record a few real responses and
