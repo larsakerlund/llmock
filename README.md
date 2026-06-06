@@ -326,67 +326,9 @@ provider prefix: OpenAI at `http://host:8080/openai/v1`, Anthropic at
 [ARCHITECTURE.md](ARCHITECTURE.md#routing-is-prefix-only) for why routing is
 prefix-only.
 
-## Fidelity
-
-Faithfulness is verified by running the genuine provider SDKs against llmock. One
-command builds the server, starts it, and runs the SDK-compat suites:
-
-```sh
-./e2e/sdk_compat/run.sh
-```
-
-It exercises the real `openai`, `anthropic`, and `google-genai` SDKs against all
-four APIs, covering text, streaming, tool calls, usage, and injected errors. If
-the real SDKs parse our bytes and yield the expected objects, the format is
-faithful.
-
-### What "faithful" covers (and what it doesn't)
-
-- **Protocol fidelity is guaranteed and SDK-verified.** The wire shapes are built
-  against the providers' own SDK type definitions and validated by running the
-  genuine SDKs end to end. The protocol does not vary by model within a provider
-  (`gpt-4o` and `gpt-4o-mini` share identical Chat Completions framing, and all
-  Claude models share the Messages framing), so one adapter is faithful across
-  every model of that provider.
-- **Byte-level server fidelity is exact via cassettes, and close for synthesized
-  responses.** Cassette replay is byte-for-byte the real server's response,
-  including streaming timing. Synthesized fixtures aim to be byte-identical too:
-  field names, order, and types are matched against recorded real responses (for
-  example, non-streaming Anthropic is byte-identical to `api.anthropic.com`, down
-  to `cache_creation`, `service_tier`, and `inference_geo`). The residual gaps are
-  rare server quirks; notably, some providers pad streaming SSE with whitespace,
-  which only cassette replay reproduces exactly. When in doubt, record.
-- **Token counts are exact for OpenAI and estimated elsewhere.** When a fixture
-  doesn't pin `usage`, OpenAI models are counted with the real `tiktoken`
-  encoding (including the chat-format overhead that `api.openai.com` reports), so
-  counts match. Anthropic and Gemini publish no tokenizer, so they fall back to a
-  roughly 4-characters-per-token estimate, which is within a token or two in
-  practice; record a cassette for exact counts there, since it carries the
-  upstream's own `usage`.
-- **Model-specific behaviour is developer-authored.** Things that genuinely vary
-  by model, such as extended thinking and reasoning items, vision, refusals, and
-  specific stop reasons, aren't emulated automatically; you express whatever you
-  need in your (developer-owned) fixtures.
-
-## Architecture
-
-Three decoupled layers sit over a provider-neutral core, so that adding a
-provider means writing a new adapter rather than changing the engine:
-
-```
-HTTP → Protocol Adapter (per-API wire parse/serialize, incl. SSE framing)
-     → Fixture Engine    (match request → canned response)
-     → Stream Simulator  (chunk response into deltas with configurable timing)
-```
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the layer breakdown, the request
-resolution path, the module map, and how to add a provider.
-
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev
-setup, the lint and test gate, commit conventions, and the real-SDK fidelity
-requirement that gates every adapter.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 
