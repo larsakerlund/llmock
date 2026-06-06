@@ -9,6 +9,7 @@
 # Secrets — provider API keys for record mode. Never commit.
 .env
 .env.*
+!.env.example
 *.env
 
 # Python e2e/SDK-compat helpers
