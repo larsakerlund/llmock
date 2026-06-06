@@ -229,7 +229,7 @@ fixtures. Replay is byte-for-byte exact.
 ### Record your own
 
 1. Start the container in record mode, mounting a writable directory for the
-   cassettes (recordings are written as the image's `llmock` user):
+   cassettes:
    ```sh
    docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes" \
      ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes --record
@@ -248,8 +248,7 @@ fixtures. Replay is byte-for-byte exact.
    the real provider (chosen by endpoint, or by `--upstream`), saved under
    `--cassette-dir`, and the genuine bytes are returned to your app. Fire as many
    as you like; each distinct request becomes its own cassette.
-4. Replay offline by restarting without `--record` (the volume can be read-only
-   now; cassettes load at startup):
+4. Replay offline by restarting without `--record`:
    ```sh
    docker run --rm -p 8080:8080 -v "$PWD/cassettes:/cassettes:ro" \
      ghcr.io/larsakerlund/llmock:latest --cassette-dir /cassettes
