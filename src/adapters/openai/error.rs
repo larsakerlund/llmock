@@ -88,17 +88,6 @@ impl ApiError {
             },
         }
     }
-
-    /// A 501 response for a capability llmock does not implement. Currently
-    /// unused; kept so an endpoint can signal not-implemented.
-    #[allow(dead_code)]
-    pub(crate) fn not_implemented(message: impl Into<String>) -> Self {
-        ApiError::new(
-            StatusCode::NOT_IMPLEMENTED,
-            "llmock_not_implemented",
-            message,
-        )
-    }
 }
 
 impl IntoResponse for ApiError {
