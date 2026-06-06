@@ -1,0 +1,26 @@
+# Run `pre-commit install` once. These hooks run the same checks as CI, using the
+# toolchain pinned in rust-toolchain.toml. fmt and clippy run on commit; the
+# slower test run is deferred to push.
+default_install_hook_types: [pre-commit, pre-push]
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --all-targets
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
