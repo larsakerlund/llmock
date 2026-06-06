@@ -8,8 +8,8 @@
 A fast, byte-faithful emulator of LLM provider HTTP APIs, for testing your app
 without access to a real LLM. Point your SDK's `base_url` at llmock and it serves
 responses that look exactly like the real provider: the same JSON shapes, the
-same streaming wire format, and the same error envelopes. One emulator covers
-OpenAI, Anthropic, and Google Gemini.
+same streaming wire format, and the same error envelopes. A single emulator
+covers whichever providers your app calls.
 
 ## Why llmock
 
@@ -21,7 +21,7 @@ you control.
 
 ## Features
 
-- OpenAI, Anthropic, and Google Gemini, all driven by one fixture set.
+- OpenAI, Anthropic, and Google Gemini.
 - Real wire format: exact JSON shapes, native SSE streaming, and provider error
   envelopes, verified by running the genuine provider SDKs end to end.
 - Configurable latency, with per-model defaults for time-to-first-token,
