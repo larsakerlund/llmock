@@ -193,6 +193,15 @@ impl Cassettes {
 /// Persist a cassette to `dir/<hash>.json`.
 fn save(dir: &Path, cassette: &Cassette) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+    // Cassettes hold the upstream response body verbatim; keep them owner-only.
+    // create_dir_all is a no-op when the dir exists, but re-tightening on each
+    // save is intended hardening, not a bug.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("securing {}: {e}", dir.display()))?;
+    }
     let mut hasher = DefaultHasher::new();
     serde_json::to_string(cassette)
         .unwrap_or_default()
@@ -200,6 +209,12 @@ fn save(dir: &Path, cassette: &Cassette) -> Result<PathBuf, String> {
     let path = dir.join(format!("{:016x}.json", hasher.finish()));
     let text = serde_json::to_string_pretty(cassette).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("securing {}: {e}", path.display()))?;
+    }
     Ok(path)
 }
 
@@ -258,6 +273,27 @@ fn forwardable(headers: &HeaderMap) -> Vec<(reqwest::header::HeaderName, String)
         .collect()
 }
 
+/// Redact secret-bearing query-param values (`key`, `api_key`, `access_token`,
+/// case-insensitive) for logging or client-facing messages. The Gemini SDK
+/// passes the API key as `?key=SECRET`; never log it raw. Returns the query with
+/// those values replaced by `REDACTED`, order and other params preserved. Matches
+/// by raw param name and does not url-decode.
+fn redact_query(query: &str) -> String {
+    const SECRET_PARAMS: &[&str] = &["key", "api_key", "access_token"];
+    query
+        .split('&')
+        .map(|pair| {
+            let (name, _val) = pair.split_once('=').unwrap_or((pair, ""));
+            if !pair.is_empty() && SECRET_PARAMS.iter().any(|p| name.eq_ignore_ascii_case(p)) {
+                format!("{name}=REDACTED")
+            } else {
+                pair.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 /// Proxy the request to the real upstream and capture the exchange. `path` is
 /// the provider path (already prefix-stripped by routing). On success the
 /// exchange is saved and the captured response returned to replay to the client.
@@ -279,6 +315,14 @@ pub(crate) async fn record(
     } else {
         format!("{base}{path}?{query}")
     };
+    // A log/error-safe copy of the URL: only the query can carry `?key=SECRET`,
+    // so redact its secret params. `url` (with the real key) is used solely for
+    // the outbound request; everything human-visible uses `safe_url`.
+    let safe_url = if query.is_empty() {
+        format!("{base}{path}")
+    } else {
+        format!("{base}{path}?{}", redact_query(query))
+    };
 
     let mut builder = client.request(method.clone(), &url).body(raw_body.to_vec());
     for (name, value) in forwardable(headers) {
@@ -291,10 +335,13 @@ pub(crate) async fn record(
     let mut upstream = match builder.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("record: upstream request to {url} failed: {e}");
+            tracing::error!("record: upstream request to {safe_url} failed: {e}");
+            // The client body stays generic: the reqwest error may embed the full
+            // URL with the key, so it never reaches the caller. Redacted detail
+            // lives in the server log above.
             return (
                 StatusCode::BAD_GATEWAY,
-                format!("llmock record: upstream request failed: {e}"),
+                "llmock record: upstream request failed",
             )
                 .into_response();
         }
@@ -324,8 +371,18 @@ pub(crate) async fn record(
                 }
                 Ok(None) => break,
                 Err(e) => {
-                    tracing::error!("record: error reading upstream stream: {e}");
-                    break;
+                    // Abort rather than save a cassette truncated by a transient
+                    // upstream error: the partial frames would persist under the
+                    // healthy upstream status and replay forever as if complete,
+                    // with no marker that they were cut short. Mirror the
+                    // send-error and non-stream body-read handling: a generic,
+                    // redacted BAD_GATEWAY, with detail only in the server log.
+                    tracing::error!("record: error reading upstream stream from {safe_url}: {e}");
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        "llmock record: upstream stream read failed",
+                    )
+                        .into_response();
                 }
             }
         }
@@ -343,10 +400,10 @@ pub(crate) async fn record(
         let bytes = match upstream.bytes().await {
             Ok(b) => b,
             Err(e) => {
-                tracing::error!("record: error reading upstream body from {url}: {e}");
+                tracing::error!("record: error reading upstream body from {safe_url}: {e}");
                 return (
                     StatusCode::BAD_GATEWAY,
-                    format!("llmock record: upstream body read failed: {e}"),
+                    "llmock record: upstream body read failed",
                 )
                     .into_response();
             }
@@ -492,6 +549,49 @@ mod tests {
             "https://anthropic.gw.example"
         );
         assert_eq!(rec.base_for(Endpoint::Gemini), "https://fallback.example");
+    }
+
+    #[test]
+    fn redact_query_masks_gemini_key() {
+        assert_eq!(redact_query("key=AIzaSECRET"), "key=REDACTED");
+    }
+
+    #[test]
+    fn redact_query_keeps_order_and_non_secret_params() {
+        assert_eq!(
+            redact_query("alt=sse&key=SECRET&foo=bar"),
+            "alt=sse&key=REDACTED&foo=bar"
+        );
+    }
+
+    #[test]
+    fn redact_query_is_case_insensitive() {
+        assert_eq!(
+            redact_query("API_KEY=x&Access_Token=y"),
+            "API_KEY=REDACTED&Access_Token=REDACTED"
+        );
+    }
+
+    #[test]
+    fn redact_query_passes_through_when_no_secret() {
+        assert_eq!(redact_query(""), "");
+        assert_eq!(redact_query("foo=bar"), "foo=bar");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_writes_owner_only_perms() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = save(
+            dir.path(),
+            &cassette(Endpoint::OpenAiChat, false, "gpt-4o", "weather"),
+        )
+        .expect("save");
+        let file_mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(file_mode, 0o600);
+        let dir_mode = std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700);
     }
 
     #[test]
