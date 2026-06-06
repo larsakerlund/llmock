@@ -21,7 +21,7 @@ RUN apt-get update \
         ca-certificates=20230311+deb12u1 \
         curl=7.88.1-10+deb12u14 \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --shell /usr/sbin/nologin llmock
+    && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin llmock
 COPY --from=builder /usr/local/bin/llmock /usr/local/bin/llmock
 USER llmock
 
