@@ -1,0 +1,7 @@
+# Triaged vulnerabilities accepted for the llmock image. Trivy skips any CVE id
+# listed here (one per line). Prefer fixing (bump the base image or a dependency)
+# over ignoring. Only add an entry with a dated justification: why it is not
+# exploitable here, or when a fix is expected.
+#
+# Example:
+#   CVE-2024-12345  # not reachable: no TLS client path; revisit 2026-09

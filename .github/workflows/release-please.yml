@@ -41,6 +41,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless signing of the provenance attestation
+      attestations: write # record the attestation on the repo
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -68,7 +70,27 @@ jobs:
             type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
             type=raw,value=${{ needs.release-please.outputs.major }}
             type=raw,value=latest
+      # Gate the release on vulnerabilities BEFORE publishing. Build amd64 into
+      # the local daemon and scan it; the multi-arch push below reuses these
+      # warmed builder layers, so the scan adds no extra compile. OS packages and
+      # the Rust binary are arch-neutral for CVE purposes, so amd64 is enough.
       - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: llmock:scan
+      - name: scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: llmock:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          trivyignores: .trivyignore
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        id: build
         with:
           context: .
           push: true
@@ -76,12 +98,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-          # Attach supply-chain attestations to the published image: SLSA build
-          # provenance and an SBOM, both as referrer manifests in the index.
-          provenance: mode=max
+          # Embed an SBOM. Provenance is signed separately (attest step below), so
+          # the unsigned BuildKit provenance is off to avoid two provenance docs.
+          provenance: false
           sbom: true
           # No cache on release builds: a release is a trust anchor, so it builds
           # clean from source rather than risk pulling a poisoned layer from the
-          # shared gha cache. (The Dockerfile's BuildKit cache mounts are
-          # builder-local and start empty on a fresh runner, so they carry no
-          # state between runs.)
+          # shared gha cache. (The within-job builder cache from the scan build is
+          # this run's own clean state, so reusing it is safe.)
+      - name: attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
