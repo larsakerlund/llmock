@@ -21,7 +21,8 @@ you control.
 
 ## Features
 
-- OpenAI, Anthropic, and Google Gemini.
+- Multiple providers: OpenAI, Anthropic, and Google Gemini, each behind its own
+  endpoint prefix.
 - Real wire format: exact JSON shapes, native SSE streaming, and provider error
   envelopes, verified by running the genuine provider SDKs end to end.
 - Configurable latency, with per-model defaults for time-to-first-token,
