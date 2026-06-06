@@ -294,3 +294,41 @@ async fn dump() {
         println!("\n===== {uri} [{status}] =====\n{out}");
     }
 }
+
+/// The non-streaming handler waits the model's latency before replying — the
+/// other tests use instant timing, so this is the only check that the adapter
+/// actually applies the delay (not just that `response_delay` computes it).
+#[tokio::test]
+async fn non_stream_response_waits_for_the_model_latency() {
+    use std::time::{Duration, Instant};
+    let fixtures = Fixtures::from_yaml(FIXTURES).expect("valid fixtures");
+    let app = build_app(AppState::new(
+        fixtures,
+        crate::core::StreamDefaults {
+            ttft_ms: Some(40),
+            inter_token_ms: Some(40),
+            jitter_ms: Some(0),
+            burstiness: Some(0.0),
+            chunk_by: Some(crate::core::ChunkBy::Word),
+        },
+    ));
+    // The fallback fixture replies "Hello there, friend." (3 word pieces):
+    // ttft + 2*inter = 120ms.
+    let req = Request::builder()
+        .method("POST")
+        .uri("/openai/v1/chat/completions")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}"#.to_string(),
+        ))
+        .unwrap();
+    let start = Instant::now();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let _ = resp.into_body().collect().await.unwrap();
+    // Lower bound only, for robustness; the real total is ~120ms.
+    assert!(
+        start.elapsed() >= Duration::from_millis(80),
+        "non-streaming response should wait ~the model latency"
+    );
+}
