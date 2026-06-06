@@ -10,7 +10,9 @@ services:
     # to serve the built-in fallback response with no configuration.
     volumes:
       - ./fixtures:/fixtures:ro
+      # - ./cassettes:/cassettes:ro       # replay recorded responses
     command: ["--fixtures", "/fixtures/example.yaml"]
+    # command: ["--cassette-dir", "/cassettes"]   # ...and replay them instead
     # Every flag is also an env var; uncomment for byte-stable responses.
     # environment:
     #   LLMOCK_DETERMINISTIC: "true"

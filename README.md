@@ -75,8 +75,11 @@ services:
   llmock:
     image: ghcr.io/larsakerlund/llmock:latest
     ports: ["8080:8080"]
-    volumes: ["./fixtures:/fixtures:ro"]
+    volumes:
+      - "./fixtures:/fixtures:ro"
+      # - "./cassettes:/cassettes:ro"     # replay recorded responses
     command: ["--fixtures", "/fixtures/example.yaml"]
+    # command: ["--cassette-dir", "/cassettes"]   # ...and replay them instead
 ```
 
 Run `llmock --help` for the full list of flags and environment variables.
