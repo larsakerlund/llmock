@@ -171,9 +171,9 @@ suite. (Recorded cassettes ignore these and replay their own real timing; see
 Non-streaming responses take the same total time. A provider generates the whole
 response server-side before it replies, so a non-streamed call is no faster than
 a streamed one; you just don't see the progress until it lands. llmock waits that
-equivalent total (time-to-first-token plus an inter-token gap per token) before
-returning the JSON, from the same per-model defaults and knobs, so the `0`-delay
-escape hatch makes it instant too.
+equivalent total (time-to-first-token plus an inter-token gap before each later
+token) before returning the JSON, from the same per-model defaults and knobs, so
+the `0`-delay escape hatch makes it instant too.
 
 ### Error & failure injection
 
