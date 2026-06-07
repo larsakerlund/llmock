@@ -67,12 +67,9 @@ docker run --rm -p 8080:8080 \
   ghcr.io/larsakerlund/llmock:latest --fixtures /fixtures/example.yaml
 ```
 
-Every flag is also an environment variable, so it drops into a compose stack
-alongside your app. Most map predictably (`LLMOCK_PORT`, `LLMOCK_FIXTURES`,
-`LLMOCK_DETERMINISTIC`); the latency flags drop the `default-` prefix in their
-environment form, so `--default-ttft-ms` is `LLMOCK_TTFT_MS`,
-`--default-inter-token-ms` is `LLMOCK_INTER_TOKEN_MS`, and likewise for the
-rest. A ready-to-edit [`docker-compose.yml`](docker-compose.yml) is included:
+Every flag has an environment-variable form too, so it drops into a compose
+stack alongside your app. A ready-to-edit
+[`docker-compose.yml`](docker-compose.yml) is included:
 
 ```yaml
 services:
