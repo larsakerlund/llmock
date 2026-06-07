@@ -87,8 +87,7 @@ Run `llmock --help` for the full list of flags and environment variables.
 
 ### Build from source
 
-llmock is a single Rust binary. Build it with Rust 1.96+, pinned in
-[`rust-toolchain.toml`](rust-toolchain.toml):
+llmock is a single Rust binary. Build it with Rust 1.96+:
 
 ```sh
 git clone https://github.com/larsakerlund/llmock
