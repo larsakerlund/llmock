@@ -18,8 +18,8 @@ FROM debian:13.5-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b58
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        ca-certificates=20230311+deb12u1 \
-        curl=7.88.1-10+deb12u14 \
+        ca-certificates=20250419 \
+        curl=8.14.1-2+deb13u3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin llmock
 COPY --from=builder /usr/local/bin/llmock /usr/local/bin/llmock
