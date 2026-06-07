@@ -2,6 +2,12 @@ version: 2
 
 # Keep dependencies and pinned references current. Commit prefixes follow the
 # project's Conventional Commit types where the ecosystem allows it.
+#
+# Every ecosystem carries a 7-day cooldown: a new release has to be public for
+# a week before Dependabot proposes it, so a compromised package is caught by
+# the ecosystem before it can land here. Cooldown applies only to version
+# updates; Dependabot security updates ignore it, so CVE patches still flow
+# immediately.
 updates:
   # Rust crates. Cargo does not support a separate prefix for dev-dependencies
   # (prefix-development and the production/development dependency-type filters
@@ -13,6 +19,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
     groups:
@@ -25,6 +33,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci
     groups:
@@ -36,6 +46,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build
 
@@ -45,6 +57,8 @@ updates:
     directory: "/e2e/sdk_compat"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: build
     groups:
