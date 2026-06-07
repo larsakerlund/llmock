@@ -38,8 +38,7 @@ you control.
 
 ## Quick start
 
-Run the published container. With no configuration it serves a built-in fallback
-response on `0.0.0.0:8080`:
+Run the published container:
 
 ```sh
 docker run --rm -p 8080:8080 ghcr.io/larsakerlund/llmock:latest
