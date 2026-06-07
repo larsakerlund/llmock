@@ -6,6 +6,9 @@
 # Local Claude Code scratch (git worktrees, session state) — never committed.
 .claude/
 
+# Local, machine-specific Claude instructions. Never committed.
+CLAUDE.local.md
+
 # Secrets — provider API keys for record mode. Never commit.
 .env
 .env.*
