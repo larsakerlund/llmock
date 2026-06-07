@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/larsakerlund/llmock/compare/v0.1.0...v0.1.1) (2026-06-07)
+
+
+### Dependencies
+
+* bump rand from 0.9.4 to 0.10.1 ([#19](https://github.com/larsakerlund/llmock/issues/19)) ([165eedd](https://github.com/larsakerlund/llmock/commit/165eeddc9eb97b809a08fa2ccc1708c5096bd0d4))
+
 ## 0.1.0 (2026-06-06)
 
 
