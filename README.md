@@ -85,11 +85,6 @@ services:
 
 Run `llmock --help` for the full list of flags and environment variables.
 
-llmock rejects request bodies larger than `--max-body-bytes` (default 32 MiB,
-env `LLMOCK_MAX_BODY_BYTES`) with the provider's own oversized-request error,
-matching what the real APIs do. Raise it if you send unusually large inline
-media, or lower it to harden a shared deployment.
-
 ### Build from source
 
 llmock is a single Rust binary. Build it with Rust 1.96+, pinned in
