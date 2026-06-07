@@ -41,6 +41,20 @@ updates:
       actions-minor:
         update-types: ["minor", "patch"]
 
+  # pre-commit hooks, tag-pinned in .pre-commit-config.yaml. Dependabot bumps
+  # the rev of each remote hook repo; the local cargo hooks have no rev to track.
+  - package-ecosystem: pre-commit
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      pre-commit-minor:
+        update-types: ["minor", "patch"]
+
   # Dockerfile base images pinned by digest.
   - package-ecosystem: docker
     directory: "/"
