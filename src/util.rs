@@ -7,7 +7,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rand::Rng;
+use rand::RngExt;
 use rand::distr::Alphanumeric;
 
 static DETERMINISTIC: AtomicBool = AtomicBool::new(false);

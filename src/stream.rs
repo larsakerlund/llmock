@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use rand::Rng;
+use rand::RngExt;
 use tokio::time::sleep;
 
 use crate::core::{ChunkBy, NeutralResponse, StreamSpec};
@@ -128,7 +128,7 @@ pub(crate) async fn sleep_response_delay(resp: &NeutralResponse) {
 /// `base`, but most tokens fire instantly and the rest pause — matching the
 /// measured real shape (median ~0, occasional spikes). Capped at 25x the pause
 /// mean to avoid a pathological multi-second stall.
-fn burst_gap(base: u64, burstiness: f64, rng: &mut impl Rng) -> u64 {
+fn burst_gap(base: u64, burstiness: f64, rng: &mut impl RngExt) -> u64 {
     let b = burstiness.clamp(0.0, 0.95);
     if base == 0 || rng.random_range(0.0..1.0) < b {
         return 0;
