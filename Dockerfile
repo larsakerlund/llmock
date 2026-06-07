@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     cargo build --release --locked \
     && cp target/release/llmock /usr/local/bin/llmock
 
-FROM debian:12.14-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS runtime
+FROM debian:13.5-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b588e51af8883bf8 AS runtime
 # The pinned base digest lags Debian's security updates, so upgrade to pick them up.
 RUN apt-get update \
     && apt-get upgrade -y \
