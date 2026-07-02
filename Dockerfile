@@ -14,7 +14,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     && cp target/release/llmock /usr/local/bin/llmock
 
 FROM debian:13.5-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b588e51af8883bf8 AS runtime
-# The pinned base digest lags Debian's security updates, so upgrade to pick them up.
+# The pinned base digest lags Debian's security updates, so upgrade to pick them
+# up. A stale build-cache layer would mask new updates by replaying the old apt
+# run, so CI feeds a changing value here to invalidate the layer and re-fetch.
+ARG APT_CACHEBUST=0
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
