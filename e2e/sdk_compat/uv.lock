@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "anthropic"
-version = "0.106.0"
+version = "0.112.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -25,9 +25,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/69/f1b6b5918d18ab47193bc7dd316bc208bc98decab5cf69b328d8a3e258dc/anthropic-0.106.0.tar.gz", hash = "sha256:f26e2645e31f66eff526b923f539b80b4b6eda1a918790cd77c0afe5e24a2203", size = 855469, upload-time = "2026-06-05T21:13:26.555Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/dd/808c144d4a883fcfd12fe0d7689b1d86bbbea6666c1cc957ad19f1017c22/anthropic-0.112.0.tar.gz", hash = "sha256:e180cd91aa5b9b32e4007fe69892ab128d8a86b9f90825103b1903fbc977d0af", size = 937460, upload-time = "2026-06-24T18:45:56.844Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/7a/8c64e9ba12b16d5d1c64e0fc9da1f32cbf6742f14fe2ad943f83a2ed8639/anthropic-0.106.0-py3-none-any.whl", hash = "sha256:d0e4a7448e54c3942833cee5b3de5f1b31289fd49999bfbcc2ec0c0acaddf75f", size = 838152, upload-time = "2026-06-05T21:13:28.404Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/26/ea71185027956325be1903d4fcaf7461d5ef40ca8f0e64f992e24ea9db0e/anthropic-0.112.0-py3-none-any.whl", hash = "sha256:bcc6268612c716dbb77133dd60fc41d26016d1b81dee9a52314d210193638751", size = 931954, upload-time = "2026-06-24T18:45:58.205Z" },
 ]
 
 [[package]]
@@ -253,7 +253,7 @@ requests = [
 
 [[package]]
 name = "google-genai"
-version = "2.7.0"
+version = "2.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -267,9 +267,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a7/7b/6eb3b3d545b6bb4c374acba1ccf91b0f33b605e551536a6243cfcef2f07f/google_genai-2.7.0.tar.gz", hash = "sha256:3c6f32f5ced9877ededd1b384b5e5b7f09c20046ec3390b662b16d8cd1882ac5", size = 555853, upload-time = "2026-05-28T15:39:24.58Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/fe/b796087493c3c55371aa58b9f264841ace5bfdf8c668cafa7afa33c44bec/google_genai-2.10.0.tar.gz", hash = "sha256:77912cd558cd7dfd5b75c25fd1c609e78d7954dde583331104022a46ea90f9ee", size = 600039, upload-time = "2026-06-24T01:33:18.157Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/dd/7a8be39e9d698e80e9db796514efbc6083dbd787bdb9a101e8ba47248e5e/google_genai-2.7.0-py3-none-any.whl", hash = "sha256:21cac381e09a869151706aba797b6a4f96cfe92c484e13204d092caee7ff11cb", size = 822545, upload-time = "2026-05-28T15:39:22.907Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/39/00bcfd94de255d24249401efff4f48d77bf6066b46447e519fa193c0c299/google_genai-2.10.0-py3-none-any.whl", hash = "sha256:d5350311567ae660c24cbc1752aee4b3d660f89c0106d2dcd2a69978c35afe1e", size = 957974, upload-time = "2026-06-24T01:33:16.296Z" },
 ]
 
 [[package]]
@@ -384,14 +384,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = "==0.106.0" },
-    { name = "google-genai", specifier = "==2.7.0" },
-    { name = "openai", specifier = "==2.41.0" },
+    { name = "anthropic", specifier = "==0.112.0" },
+    { name = "google-genai", specifier = "==2.10.0" },
+    { name = "openai", specifier = "==2.44.0" },
 ]
 
 [[package]]
 name = "openai"
-version = "2.41.0"
+version = "2.44.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -403,9 +403,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/a6/5815fe2e2aca74b36c650d1bd43b69827cee568073d0d2d9b6fc5aaac80c/openai-2.41.0.tar.gz", hash = "sha256:db5c362acd6604b84f076abbefa66826ea4b46ecba2954ed866e6a149a1352c0", size = 783525, upload-time = "2026-06-03T22:39:40.719Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/f5/7c7cb955305cb41f7f3c5fd7e0e38bf6bbf2658468863d4b7b868a5cb8df/openai-2.44.0.tar.gz", hash = "sha256:68a5a5ffad82b8ff7d451c437529fb64f7c3b8123aaf0c021966a882d9e3947d", size = 988753, upload-time = "2026-06-24T20:56:02.293Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/51/d82bb424e8aa372190c5233253a2ceb399a778747d18b42cff487411e663/openai-2.41.0-py3-none-any.whl", hash = "sha256:20cc7952e8501c7e5773dd2ef7be437bae9cb549044902e1041a83a54516e375", size = 1353378, upload-time = "2026-06-03T22:39:38.964Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/f4/561ed79fd94876160018a5e75254cfcb9b0e62d4dded9dcb20072e86d623/openai-2.44.0-py3-none-any.whl", hash = "sha256:0a2a3ab2e29aeda368700f662ff9ba0f9df17ba4c54577a64e08b8115a3cc0ad", size = 1366216, upload-time = "2026-06-24T20:55:58.882Z" },
 ]
 
 [[package]]
