@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/larsakerlund/llmock/compare/v0.1.1...v0.1.2) (2026-07-02)
+
+
+### Dependencies
+
+* bump regex in the cargo-minor group across 1 directory ([#24](https://github.com/larsakerlund/llmock/issues/24)) ([ac81da4](https://github.com/larsakerlund/llmock/commit/ac81da44639c407067ac3f9b4bb791a294d2e68f))
+
 ## [0.1.1](https://github.com/larsakerlund/llmock/compare/v0.1.0...v0.1.1) (2026-06-07)
 
 
