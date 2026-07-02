@@ -124,11 +124,17 @@ jobs:
       # Build the image on every change to catch Dockerfile, base-image, and apt
       # breakage. Single-arch and cached; not pushed (release-please.yml
       # publishes the real multi-arch image).
+      # Date-stamp the apt layer so a stale build-cache layer cannot mask new
+      # Debian security updates; the layer re-runs at most once per day.
+      - name: compute apt cache-bust date
+        id: cachebust
+        run: echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           load: true
           tags: llmock:ci
+          build-args: APT_CACHEBUST=${{ steps.cachebust.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: scan image for vulnerabilities
