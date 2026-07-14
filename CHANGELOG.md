@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/larsakerlund/llmock/compare/v0.1.2...v0.1.3) (2026-07-14)
+
+
+### Dependencies
+
+* bump rand from 0.10.1 to 0.10.2 in the cargo-minor group ([#31](https://github.com/larsakerlund/llmock/issues/31)) ([915ab1b](https://github.com/larsakerlund/llmock/commit/915ab1bc76fb1c11fa2a37501bd8d0412a565552))
+
 ## [0.1.2](https://github.com/larsakerlund/llmock/compare/v0.1.1...v0.1.2) (2026-07-02)
 
 
