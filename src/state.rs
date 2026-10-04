@@ -34,7 +34,7 @@ impl AppState {
             stream_defaults,
             cassettes: Arc::new(Cassettes::default()),
             record: None,
-            client: reqwest::Client::new(),
+            client: http_client(),
             replay_speed: 1.0,
             max_body_bytes: crate::config::DEFAULT_MAX_BODY_BYTES,
         }
@@ -56,4 +56,13 @@ impl AppState {
         self.max_body_bytes = n;
         self
     }
+}
+
+/// The record-mode HTTP client. reqwest is built without a bundled crypto
+/// provider, so install rustls's ring provider as the process default first.
+/// Installing fails only when a provider is already in place (an earlier
+/// `AppState` installed it), which is fine to ignore.
+fn http_client() -> reqwest::Client {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::new()
 }

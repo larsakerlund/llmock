@@ -24,9 +24,9 @@ allow = [
     "Unicode-DFS-2016",
     "Zlib",
     "MPL-2.0",
-    # webpki-roots ships Mozilla's root CA bundle under the Community Data
+    # webpki-root-certs ships Mozilla's root CA bundle under the Community Data
     # License Agreement (permissive variant), pulled in transitively by
-    # reqwest's rustls-tls feature.
+    # rustls-platform-verifier, reqwest's certificate verifier.
     "CDLA-Permissive-2.0",
 ]
 # A crate scoring below this confidence on license-text detection is treated as

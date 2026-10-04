@@ -26,7 +26,10 @@ rand = "0.10"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-stream = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+# reqwest's `rustls` feature bundles aws-lc; keep the lighter ring backend and
+# install it as the process default before the client is built (state.rs).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 tiktoken-rs = "0.12"
 
 [dev-dependencies]
