@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     cargo build --release --locked \
     && cp target/release/llmock /usr/local/bin/llmock
 
-FROM debian:13.5-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2 AS runtime
+FROM debian:13.7-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS runtime
 # The pinned base digest lags Debian's security updates, so upgrade to pick them
 # up. A stale build-cache layer would mask new updates by replaying the old apt
 # run, so CI feeds a changing value here to invalidate the layer and re-fetch.
