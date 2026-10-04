@@ -17,12 +17,14 @@ FROM debian:13.7-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b
 # The pinned base digest lags Debian's security updates, so upgrade to pick them
 # up. A stale build-cache layer would mask new updates by replaying the old apt
 # run, so CI feeds a changing value here to invalidate the layer and re-fetch.
+# Packages are installed unpinned. Debian's archive keeps only the latest build
+# of each, so an exact version pin breaks the build whenever a security update
+# ships, and the upgrade already moves everything to the latest build anyway.
 ARG APT_CACHEBUST=0
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates=20250419 \
-        curl=8.14.1-2+deb13u5 \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin llmock
 COPY --from=builder /usr/local/bin/llmock /usr/local/bin/llmock
