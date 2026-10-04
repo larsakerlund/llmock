@@ -3,6 +3,11 @@
 ## [0.1.3](https://github.com/larsakerlund/llmock/compare/v0.1.2...v0.1.3) (2026-10-04)
 
 
+### Features
+
+* record mode now uses the system CA store ([9637564](https://github.com/larsakerlund/llmock/commit/9637564d3341566e890253af3aa2c67e549d2455))
+
+
 ### Dependencies
 
 * bump quinn-proto from 0.11.14 to 0.11.19 ([#44](https://github.com/larsakerlund/llmock/issues/44)) ([0752bbb](https://github.com/larsakerlund/llmock/commit/0752bbb72afaf8ad8a4ed0151b34be123c877541))
@@ -10,7 +15,6 @@
 * bump reqwest to 0.13 ([9637564](https://github.com/larsakerlund/llmock/commit/9637564d3341566e890253af3aa2c67e549d2455))
 * bump rustls to 0.23.45 and chacha20 to 0.10.2 ([3926600](https://github.com/larsakerlund/llmock/commit/39266000d45c14819d3b49ef63d2ef66a350506f))
 * bump the cargo-minor group across 1 directory with 8 updates ([#56](https://github.com/larsakerlund/llmock/issues/56)) ([6e03885](https://github.com/larsakerlund/llmock/commit/6e03885b357da1a38d315164e4d8d293fc443973))
-* record mode now uses the system CA store ([9637564](https://github.com/larsakerlund/llmock/commit/9637564d3341566e890253af3aa2c67e549d2455))
 
 ## [0.1.2](https://github.com/larsakerlund/llmock/compare/v0.1.1...v0.1.2) (2026-07-02)
 
