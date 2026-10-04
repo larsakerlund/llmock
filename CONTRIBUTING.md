@@ -13,7 +13,7 @@ or recorded cassette that reproduces it helps most.
 ## Development setup
 
 llmock is a Rust project. The toolchain is pinned in
-[`rust-toolchain.toml`](rust-toolchain.toml) (Rust 1.96+); rustup picks it up
+[`rust-toolchain.toml`](rust-toolchain.toml) (Rust 1.98+); rustup picks it up
 automatically.
 
 ```sh

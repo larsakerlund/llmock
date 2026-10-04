@@ -2,7 +2,7 @@
 
 # Full (non-slim) rust image: ring (rustls's backend) needs a C toolchain, so no
 # openssl/cmake. Digest-pinned so Dependabot bumps it deliberately.
-FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS builder
+FROM rust:1.98-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e AS builder
 WORKDIR /app
 COPY . .
 # Scope the target cache per arch, else a multi-arch build shares /app/target
