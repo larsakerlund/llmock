@@ -22,7 +22,7 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates=20250419 \
-        curl=8.14.1-2+deb13u3 \
+        curl=8.14.1-2+deb13u5 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin llmock
 COPY --from=builder /usr/local/bin/llmock /usr/local/bin/llmock
