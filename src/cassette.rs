@@ -249,6 +249,33 @@ impl RecordConfig {
     }
 }
 
+/// Record mode as the server runs it: the config plus the HTTP client that
+/// proxies misses upstream. The client exists only while recording, because
+/// building it loads the platform's root certificates: a replay or fixture
+/// server should neither pay for that nor fail on a host without a CA store.
+#[derive(Debug, Clone)]
+pub(crate) struct Recorder {
+    pub config: RecordConfig,
+    pub client: reqwest::Client,
+}
+
+impl Recorder {
+    /// Build the upstream client. reqwest is built without a bundled crypto
+    /// provider, so install rustls's ring provider as the process default
+    /// first; that fails only when a provider is already installed (an earlier
+    /// `Recorder`), which is fine to ignore.
+    pub(crate) fn new(config: RecordConfig) -> Result<Self, String> {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder().build().map_err(|e| {
+            let cause = std::error::Error::source(&e)
+                .map(|s| format!(": {s}"))
+                .unwrap_or_default();
+            format!("record mode: cannot initialize the upstream HTTP client: {e}{cause}")
+        })?;
+        Ok(Recorder { config, client })
+    }
+}
+
 /// Headers worth forwarding to the upstream (auth + content negotiation).
 fn forwardable(headers: &HeaderMap) -> Vec<(reqwest::header::HeaderName, String)> {
     const KEEP: &[&str] = &[

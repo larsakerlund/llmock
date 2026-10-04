@@ -43,8 +43,8 @@ pub(crate) async fn resolve(
     if let Some(rec) = &state.record {
         return Resolution::Raw(
             record(
-                &state.client,
-                rec,
+                &rec.client,
+                &rec.config,
                 endpoint,
                 req,
                 path,

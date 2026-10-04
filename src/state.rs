@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::cassette::{Cassettes, RecordConfig};
+use crate::cassette::{Cassettes, Recorder};
 use crate::core::StreamDefaults;
 use crate::fixtures::Fixtures;
 
@@ -16,9 +16,7 @@ pub(crate) struct AppState {
     /// Cassettes loaded at startup, matched by the same engine as fixtures.
     pub cassettes: Arc<Cassettes>,
     /// Present when recording: proxy misses to the real upstream and save them.
-    pub record: Option<RecordConfig>,
-    /// HTTP client used for record-mode proxying.
-    pub client: reqwest::Client,
+    pub record: Option<Recorder>,
     /// Factor applied to recorded stream timing on replay (1.0 = real timing,
     /// 0 = instant). See `--replay-speed`.
     pub replay_speed: f64,
@@ -34,7 +32,6 @@ impl AppState {
             stream_defaults,
             cassettes: Arc::new(Cassettes::default()),
             record: None,
-            client: http_client(),
             replay_speed: 1.0,
             max_body_bytes: crate::config::DEFAULT_MAX_BODY_BYTES,
         }
@@ -43,7 +40,7 @@ impl AppState {
     pub(crate) fn with_cassettes(
         mut self,
         cassettes: Cassettes,
-        record: Option<RecordConfig>,
+        record: Option<Recorder>,
         replay_speed: f64,
     ) -> Self {
         self.cassettes = Arc::new(cassettes);
@@ -56,13 +53,4 @@ impl AppState {
         self.max_body_bytes = n;
         self
     }
-}
-
-/// The record-mode HTTP client. reqwest is built without a bundled crypto
-/// provider, so install rustls's ring provider as the process default first.
-/// Installing fails only when a provider is already in place (an earlier
-/// `AppState` installed it), which is fine to ignore.
-fn http_client() -> reqwest::Client {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    reqwest::Client::new()
 }

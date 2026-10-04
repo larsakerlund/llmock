@@ -22,7 +22,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
 
-use cassette::{Cassettes, RecordConfig};
+use cassette::{Cassettes, RecordConfig, Recorder};
 use config::Config;
 use fixtures::Fixtures;
 use state::AppState;
@@ -85,7 +85,8 @@ async fn main() {
             upstream_anthropic: config.upstream_anthropic.clone(),
             upstream_gemini: config.upstream_gemini.clone(),
         });
-        state = state.with_cassettes(store, record, config.replay_speed);
+        let recorder = exit_on_error(record.map(Recorder::new).transpose());
+        state = state.with_cassettes(store, recorder, config.replay_speed);
     }
     let app = build_app(state);
 
