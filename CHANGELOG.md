@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.4](https://github.com/larsakerlund/llmock/compare/v0.1.3...v0.1.4) (2026-11-09)
+
+
+### Dependencies
+
+* bump rustls, rustls-webpki, tokio and webpki-root-certs ([68f503f](https://github.com/larsakerlund/llmock/commit/68f503f3fc4ef47ab217496fb9e9b9a154bfb183))
+* bump serde_json from 1.0.151 to 1.0.154 ([#71](https://github.com/larsakerlund/llmock/issues/71)) ([a8419ca](https://github.com/larsakerlund/llmock/commit/a8419ca8301578fe60d07649d883b50838250788))
+* parse fixture files with serde-saphyr ([bcb5960](https://github.com/larsakerlund/llmock/commit/bcb5960099e0a608af5b9ce06c53ca84e65f83bf))
+
 ## [0.1.3](https://github.com/larsakerlund/llmock/compare/v0.1.2...v0.1.3) (2026-10-04)
 
 
