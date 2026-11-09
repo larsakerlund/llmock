@@ -84,14 +84,14 @@ pub(crate) enum Args {
     /// Used verbatim as the arguments JSON string.
     Str(String),
     /// Any structured YAML value, serialized to a compact JSON string.
-    Value(serde_yaml::Value),
+    Value(serde_json::Value),
 }
 
 impl Args {
     fn to_json_string(&self) -> String {
         match self {
             Args::Str(s) => s.clone(),
-            Args::Value(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()),
+            Args::Value(v) => v.to_string(),
         }
     }
 }
@@ -300,6 +300,21 @@ impl Match {
     }
 }
 
+/// How untyped YAML scalars (tool-call `arguments` mappings) resolve. They
+/// become the arguments JSON the SDK sees, so resolve conservatively: only
+/// `true`/`false` are booleans (`yes`, `on` stay strings), numbers with leading
+/// zeros or underscores (`014`, `1_000`) stay strings, and `.inf`/`.nan` become
+/// JSON `null`, since JSON has no non-finite numbers. Duplicate keys are
+/// rejected.
+fn yaml_options() -> serde_saphyr::Options {
+    serde_saphyr::options! {
+        strict_booleans: true,
+        leading_zero_numbers_as_strings: true,
+        underscored_numbers_as_strings: true,
+        non_finite_float_policy: serde_saphyr::NonFiniteFloatPolicy::PassThrough,
+    }
+}
+
 impl Fixtures {
     /// Load fixtures from a YAML file, validating `chunk_by` values up front so
     /// a bad config fails at startup rather than mid-request.
@@ -311,7 +326,8 @@ impl Fixtures {
 
     /// Parse and validate fixtures from a YAML string.
     pub(crate) fn from_yaml(text: &str) -> Result<Self, String> {
-        let fixtures: Fixtures = serde_yaml::from_str(text).map_err(|e| format!("parsing: {e}"))?;
+        let fixtures: Fixtures = serde_saphyr::from_str_with_options(text, yaml_options())
+            .map_err(|e| format!("parsing: {e}"))?;
         for (i, rule) in fixtures.rules.iter().enumerate() {
             // Each rule must do exactly one thing.
             match (&rule.respond, &rule.error) {
@@ -611,5 +627,76 @@ rules:
             }
             other => panic!("expected an error outcome, got {other:?}"),
         }
+    }
+
+    /// The arguments JSON of the first tool call in a `Respond` outcome.
+    fn first_tool_args(fixtures: &Fixtures) -> String {
+        match fixtures.outcome_for(&req("gpt-4o", "call"), &StreamDefaults::instant()) {
+            Some(Outcome::Respond(r)) => r.tool_calls[0].arguments.clone(),
+            other => panic!("expected a respond outcome, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn structured_arguments_resolve_scalars_conservatively() {
+        let fixtures = Fixtures::from_yaml(
+            r"
+rules:
+  - respond:
+      tool_calls:
+        - name: f
+          arguments:
+            flag: yes
+            on: off
+            t: true
+            none: ~
+            empty:
+            zip: 014
+            big: 1_000
+            hex: 0x1F
+            n: 3
+            x: 1.5
+            inf: .inf
+",
+        )
+        .expect("valid fixtures");
+        let args: serde_json::Value =
+            serde_json::from_str(&first_tool_args(&fixtures)).expect("arguments are JSON");
+        assert_eq!(
+            args,
+            serde_json::json!({
+                "flag": "yes", "on": "off", "t": true, "none": null, "empty": null,
+                "zip": "014", "big": "1_000", "hex": 31, "n": 3, "x": 1.5, "inf": null,
+            })
+        );
+    }
+
+    #[test]
+    fn string_arguments_pass_through_verbatim() {
+        let fixtures = Fixtures::from_yaml(
+            r#"
+rules:
+  - respond:
+      tool_calls:
+        - name: f
+          arguments: '{"city": "Paris"}'
+"#,
+        )
+        .expect("valid fixtures");
+        assert_eq!(first_tool_args(&fixtures), r#"{"city": "Paris"}"#);
+    }
+
+    #[test]
+    fn duplicate_keys_are_rejected() {
+        let err = Fixtures::from_yaml(
+            r"
+rules:
+  - respond:
+      content: a
+      content: b
+",
+        )
+        .expect_err("duplicate key must fail");
+        assert!(err.contains("duplicate"), "unexpected error: {err}");
     }
 }
