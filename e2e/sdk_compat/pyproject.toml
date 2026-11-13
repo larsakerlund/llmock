@@ -7,7 +7,7 @@ version = "0.0.0"
 description = "Real-SDK end-to-end checks for llmock. Not published."
 requires-python = ">=3.13"
 dependencies = [
-    "openai==3.42.1",
+    "openai==3.46.0",
     "anthropic==1.11.0",
     "google-genai==2.34.0",
 ]
